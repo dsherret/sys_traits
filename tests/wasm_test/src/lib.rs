@@ -71,8 +71,8 @@ fn run() -> std::io::Result<()> {
   let modified_time = sys.fs_modified("file.txt")??;
   let end_time = sys.sys_time_now();
   assert!(start_time <= end_time);
-  // it seems some file systems have less precision than
-  // the system clock, so just check that it's within a second
+  // some file systems have less precision than the system clock,
+  // so just check that it's within a second
   assert!(
     modified_time
       .duration_since(start_time)
