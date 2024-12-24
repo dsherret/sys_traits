@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Error;
 use std::io::ErrorKind;
@@ -115,6 +116,7 @@ struct InMemorySysInner {
   cwd: PathBuf,
   thread_sleep_enabled: bool,
   random_seed: Option<u64>,
+  envs: HashMap<OsString, OsString>,
   time: Option<SystemTime>,
 }
 
@@ -333,6 +335,7 @@ pub struct InMemorySys(Arc<RwLock<InMemorySysInner>>);
 impl Default for InMemorySys {
   fn default() -> Self {
     Self(Arc::new(RwLock::new(InMemorySysInner {
+      envs: Default::default(),
       system_root: vec![],
       cwd: PathBuf::from("/"),
       thread_sleep_enabled: true,
@@ -368,6 +371,22 @@ impl EnvSetCurrentDir for InMemorySys {
     let path = self.fs_canonicalize(path)?; // cause an error if not exists
     self.0.write().cwd = path;
     Ok(())
+  }
+}
+
+impl EnvVar for InMemorySys {
+  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
+    self.0.read().envs.get(key.as_ref()).cloned()
+  }
+}
+
+impl EnvSetVar for InMemorySys {
+  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+    self
+      .0
+      .write()
+      .envs
+      .insert(key.as_ref().to_os_string(), value.as_ref().to_os_string());
   }
 }
 
@@ -918,6 +937,13 @@ mod tests {
   use std::path::Path;
   use std::time::Duration;
   use std::time::SystemTime;
+
+  #[test]
+  fn test_env_vars() {
+    let sys = InMemorySys::default();
+    sys.env_set_var("VALUE", "other");
+    assert_eq!(sys.env_var_os("VALUE"), Some("other".into()));
+  }
 
   #[test]
   fn test_create_dir_all() {

@@ -5,6 +5,8 @@ use std::time::Duration;
 use sys_traits::impls::RealSys;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvSetCurrentDir;
+use sys_traits::EnvSetVar;
+use sys_traits::EnvVar;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsMetadata;
@@ -52,6 +54,9 @@ fn run() -> std::io::Result<()> {
   sys.env_set_current_dir(cwd.join("tests/wasm_test"))?;
   let test_dir = sys.env_current_dir()?;
   assert!(test_dir.ends_with("wasm_test"));
+
+  sys.env_set_var("SYS_TRAITS_TEST", "Value");
+  assert_eq!(sys.env_var("SYS_TRAITS_TEST").unwrap(), "Value");
 
   // file system
   assert!(sys.fs_exists_no_err(test_dir.join("src")));

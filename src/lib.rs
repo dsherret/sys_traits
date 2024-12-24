@@ -1,4 +1,7 @@
 use std::borrow::Cow;
+use std::env::VarError;
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -13,6 +16,21 @@ pub trait EnvCurrentDir {
 
 pub trait EnvSetCurrentDir {
   fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+}
+
+pub trait EnvVar {
+  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString>;
+
+  fn env_var(&self, key: impl AsRef<OsStr>) -> Result<String, VarError> {
+    match self.env_var_os(key) {
+      Some(val) => val.into_string().map_err(VarError::NotUnicode),
+      None => Err(VarError::NotPresent),
+    }
+  }
+}
+
+pub trait EnvSetVar {
+  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>);
 }
 
 // File System

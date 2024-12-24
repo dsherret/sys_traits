@@ -103,6 +103,10 @@ extern "C" {
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
   static BUILD: JsValue;
+
+  // Deno.env
+  #[wasm_bindgen(js_namespace = Deno, js_name = env)]
+  static ENV: JsValue;
 }
 
 // ==== Environment ====
@@ -134,6 +138,48 @@ impl EnvSetCurrentDir for RealSys {
 impl EnvSetCurrentDir for RealSys {
   fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
     deno_chdir(&path_to_str(path.as_ref())).map_err(js_value_to_io_error)
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl EnvVar for RealSys {
+  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
+    std::env::var_os(key)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvVar for RealSys {
+  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
+    let key = key.as_ref().to_str()?;
+    let get_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("get"))
+      .ok()
+      .and_then(|v| v.dyn_into::<js_sys::Function>().ok())?;
+    let key_js = JsValue::from_str(key);
+    let value_js = get_fn.call1(&ENV, &key_js).ok()?;
+    return value_js.as_string().map(OsString::from);
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl EnvSetVar for RealSys {
+  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+    std::env::set_var(key, value);
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvSetVar for RealSys {
+  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+    let key = key.as_ref().to_str().unwrap();
+    let value = value.as_ref().to_str().unwrap();
+    let set_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("set"))
+      .ok()
+      .and_then(|v| v.dyn_into::<js_sys::Function>().ok())
+      .unwrap();
+    let key_js = JsValue::from_str(key);
+    let value_js = JsValue::from_str(value);
+    set_fn.call2(&ENV, &key_js, &value_js).unwrap();
   }
 }
 
