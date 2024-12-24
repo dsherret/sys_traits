@@ -640,6 +640,9 @@ impl FsFileSetPermissions for std::fs::File {
 #[cfg(target_arch = "wasm32")]
 impl FsFileSetPermissions for WasmFile {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()> {
+    if is_windows() {
+      return Ok(()); // ignore
+    }
     deno_chmod_sync(&self.path, mode).map_err(js_value_to_io_error)
   }
 }
