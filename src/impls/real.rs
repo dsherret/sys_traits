@@ -765,6 +765,8 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
 
 #[cfg(target_arch = "wasm32")]
 fn string_to_path(path: String) -> PathBuf {
+  // one day we might have: https://github.com/rust-lang/rust/issues/66621#issuecomment-2561279536
+  // but for now, do this hack for windows users
   if is_windows() {
     PathBuf::from(path.replace("\\", "/"))
   } else {

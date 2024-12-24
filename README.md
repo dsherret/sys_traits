@@ -1,6 +1,7 @@
 # `sys_traits`
 
-WARNING: Extremely experimental and mostly untested... trying to get the high level design right first.
+WARNING: Extremely experimental and mostly untested... trying to get the high
+level design right first.
 
 Trait per function for system related functionality.
 
@@ -26,6 +27,6 @@ Now a caller only needs to provide a type that implements those two functions.
 
 Comes with two implementations that implement all the traits.
 
-* `sys_traits::impl::RealSys` - A real implementation of the current system.
+- `sys_traits::impl::RealSys` - A real implementation of the current system.
   - Automatically works with Wasm using the `Deno` global (untested)
-* `sys_traits::impl::InMemorySys` - An in-memory system useful for testing.
+- `sys_traits::impl::InMemorySys` - An in-memory system useful for testing.
