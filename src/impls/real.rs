@@ -348,32 +348,38 @@ impl FsOpen<WasmFile> for RealSys {
       &js_options,
       &JsValue::from_str("read"),
       &JsValue::from_bool(options.read),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     js_sys::Reflect::set(
       &js_options,
       &JsValue::from_str("write"),
       &JsValue::from_bool(options.write),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     js_sys::Reflect::set(
       &js_options,
       &JsValue::from_str("create"),
       &JsValue::from_bool(options.create),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     js_sys::Reflect::set(
       &js_options,
       &JsValue::from_str("truncate"),
       &JsValue::from_bool(options.truncate),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     js_sys::Reflect::set(
       &js_options,
       &JsValue::from_str("append"),
       &JsValue::from_bool(options.append),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     js_sys::Reflect::set(
       &js_options,
       &JsValue::from_str("createNew"),
       &JsValue::from_bool(options.create_new),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     let js_file =
       deno_open_sync(&s, &js_options).map_err(js_value_to_io_error)?;
     let file = js_file
@@ -440,7 +446,8 @@ impl FsRemoveDirAll for RealSys {
       &options,
       &JsValue::from_str("recursive"),
       &JsValue::from_bool(true),
-    );
+    )
+    .map_err(js_value_to_io_error)?;
     deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
   }
 }
