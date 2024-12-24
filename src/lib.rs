@@ -93,7 +93,7 @@ pub trait FsModified {
   ) -> std::io::Result<std::io::Result<std::time::SystemTime>>;
 }
 
-pub trait FsOpen<TFile> {
+pub trait FsOpen<TFile: std::io::Read + std::io::Write> {
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -159,13 +159,6 @@ pub trait FsWrite {
 
 pub trait FsFileSetPermissions {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()>;
-}
-
-pub trait FsFileWrite {
-  fn fs_file_write_all(
-    &mut self,
-    write: impl AsRef<[u8]>,
-  ) -> std::io::Result<()>;
 }
 
 // System

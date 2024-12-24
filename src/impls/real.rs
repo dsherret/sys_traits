@@ -36,7 +36,10 @@ extern "C" {
     options: &JsValue,
   ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = openSync, catch)]
-  fn deno_open_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  fn deno_open_sync(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<JsValue, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = readFileSync, catch)]
   fn deno_read_file_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = readTextFileSync, catch)]
@@ -48,7 +51,10 @@ extern "C" {
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
   fn deno_remove_sync(path: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
-  fn deno_remove_sync_options(path: &str, options: &JsValue) -> std::result::Result<(), JsValue>;
+  fn deno_remove_sync_options(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = renameSync, catch)]
   fn deno_rename_sync(
     oldpath: &str,
@@ -83,7 +89,7 @@ extern "C" {
 
   // Deno.FsFile
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = FsFile)]
-  #[derive(Clone)]
+  #[derive(Clone, Debug)]
   type DenoFsFile;
   #[wasm_bindgen(method, structural, js_name = close)]
   fn close_internal(this: &DenoFsFile);
@@ -300,12 +306,11 @@ impl FsModified for RealSys {
 
 #[cfg(target_arch = "wasm32")]
 fn parse_date(value: &JsValue) -> Result<SystemTime> {
-  let date = value.dyn_ref::<js_sys::Date>().ok_or_else(|| Error::new(ErrorKind::Other, "value not a date"))?;
+  let date = value
+    .dyn_ref::<js_sys::Date>()
+    .ok_or_else(|| Error::new(ErrorKind::Other, "value not a date"))?;
   let ms = date.get_time() as u64;
-  Ok(
-    SystemTime::UNIX_EPOCH
-      + std::time::Duration::from_millis(ms),
-  )
+  Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -335,20 +340,43 @@ impl FsOpen<WasmFile> for RealSys {
     options: &OpenOptions,
   ) -> std::io::Result<WasmFile> {
     let s = path_to_str(path.as_ref()).into_owned();
-    let js_file = deno_open_sync(&s).map_err(js_value_to_io_error)?;
+    let js_options = js_sys::Object::new();
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("read"),
+      &JsValue::from_bool(options.read),
+    );
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("write"),
+      &JsValue::from_bool(options.write),
+    );
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("create"),
+      &JsValue::from_bool(options.create),
+    );
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("truncate"),
+      &JsValue::from_bool(options.truncate),
+    );
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("append"),
+      &JsValue::from_bool(options.append),
+    );
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("createNew"),
+      &JsValue::from_bool(options.create_new),
+    );
+    let js_file =
+      deno_open_sync(&s, &js_options).map_err(js_value_to_io_error)?;
     let file = js_file
       .dyn_into::<DenoFsFile>()
       .map_err(js_value_to_io_error)?;
-    if options.read
-      && !options.write
-      && !options.append
-      && !options.truncate
-      && !options.create
-    {
-      Ok(WasmFile { file, path: s })
-    } else {
-      Ok(WasmFile { file, path: s })
-    }
+    Ok(WasmFile { file, path: s })
   }
 }
 
@@ -406,9 +434,9 @@ impl FsRemoveDirAll for RealSys {
     let s = path_to_str(path.as_ref());
     let options = js_sys::Object::new();
     js_sys::Reflect::set(
-        &options,
-        &JsValue::from_str("recursive"),
-        &JsValue::from_bool(true),
+      &options,
+      &JsValue::from_str("recursive"),
+      &JsValue::from_bool(true),
     );
     deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
   }
@@ -572,6 +600,7 @@ impl FsWrite for RealSys {
 // ==== File System File ====
 
 #[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
 pub struct WasmFile {
   file: DenoFsFile,
   path: String,
@@ -609,23 +638,21 @@ impl FsFileSetPermissions for WasmFile {
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl FsFileWrite for std::fs::File {
-  #[inline]
-  fn fs_file_write_all(&mut self, write: impl AsRef<[u8]>) -> Result<()> {
-    use std::io::Write;
-    self.write_all(write.as_ref())
+#[cfg(target_arch = "wasm32")]
+impl std::io::Write for WasmFile {
+  fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    Ok(self.file.write_sync_internal(buf))
+  }
+
+  fn flush(&mut self) -> std::io::Result<()> {
+    Ok(())
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsFileWrite for WasmFile {
-  fn fs_file_write_all(&mut self, write: impl AsRef<[u8]>) -> Result<()> {
-    let n = self.file.write_sync_internal(write.as_ref());
-    if n < write.as_ref().len() {
-      return Err(Error::new(ErrorKind::Other, "Incomplete write"));
-    }
-    Ok(())
+impl std::io::Read for WasmFile {
+  fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    Ok(self.file.read_sync_internal(buf).unwrap_or(0))
   }
 }
 
@@ -708,21 +735,21 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
     let error_name = error_obj.name();
 
     if error_name == "NotFound" {
-        return Error::new(
-          ErrorKind::NotFound,
-          error_obj
-            .message()
-            .as_string()
-            .unwrap_or_else(|| "Unknown error".to_string()),
-        );
+      return Error::new(
+        ErrorKind::NotFound,
+        error_obj
+          .message()
+          .as_string()
+          .unwrap_or_else(|| "Unknown error".to_string()),
+      );
     } else if error_name == "AlreadyExists" {
-        return Error::new(
-          ErrorKind::AlreadyExists,
-          error_obj
-            .message()
-            .as_string()
-            .unwrap_or_else(|| "Unknown error".to_string()),
-        );
+      return Error::new(
+        ErrorKind::AlreadyExists,
+        error_obj
+          .message()
+          .as_string()
+          .unwrap_or_else(|| "Unknown error".to_string()),
+      );
     } else if let Some(message) = error_obj.message().as_string() {
       return Error::new(ErrorKind::Other, message);
     }
@@ -759,7 +786,6 @@ fn is_windows() -> bool {
   static IS_WINDOWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
   *IS_WINDOWS.get_or_init(|| {
-    js_sys::Reflect::get(&BUILD, &JsValue::from_str("os"))
-      .unwrap() == "windows"
+    js_sys::Reflect::get(&BUILD, &JsValue::from_str("os")).unwrap() == "windows"
   })
 }

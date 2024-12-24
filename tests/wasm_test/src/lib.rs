@@ -1,3 +1,5 @@
+use std::io::Read;
+use std::io::Write;
 use std::time::Duration;
 
 use sys_traits::impls::RealSys;
@@ -9,12 +11,14 @@ use sys_traits::FsExists;
 use sys_traits::FsIsDir;
 use sys_traits::FsIsFile;
 use sys_traits::FsModified;
+use sys_traits::FsOpen;
 use sys_traits::FsRead;
 use sys_traits::FsReadToString;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSymlinkFile;
 use sys_traits::FsWrite;
+use sys_traits::OpenOptions;
 use sys_traits::SystemRandom;
 use sys_traits::SystemTimeNow;
 use sys_traits::ThreadSleep;
@@ -23,8 +27,8 @@ use wasm_bindgen::JsValue;
 
 #[wasm_bindgen]
 extern "C" {
-    #[wasm_bindgen(js_namespace = console, js_name = error)]
-    fn log(s: &str);
+  #[wasm_bindgen(js_namespace = console, js_name = error)]
+  fn log(s: &str);
 }
 
 #[wasm_bindgen]
@@ -36,6 +40,7 @@ pub fn run_tests() -> Result<(), JsValue> {
 fn run() -> std::io::Result<()> {
   let sys = RealSys::default();
 
+  let _ = sys.fs_remove_dir_all("tests/wasm_test/temp");
   sys.fs_create_dir_all("tests/wasm_test/temp/sub")?;
 
   // random
@@ -67,22 +72,83 @@ fn run() -> std::io::Result<()> {
   let end_time = sys.sys_time_now();
   assert!(start_time <= end_time);
   assert!(start_time <= modified_time);
-  assert!(end_time >= modified_time);
+  assert!(
+    end_time >= modified_time,
+    "{:?} >= {:?}",
+    end_time,
+    modified_time
+  );
 
   sys.fs_symlink_file("file.txt", "link.txt")?;
   assert_eq!(sys.fs_read_to_string("link.txt")?, "hello");
   assert_eq!(sys.fs_canonicalize("link.txt")?, temp_dir.join("file.txt"));
   sys.fs_remove_file("link.txt")?;
-  assert!(sys.fs_exists_no_err("link.txt"));
+  assert!(!sys.fs_exists_no_err("link.txt"));
+  assert!(sys.fs_exists_no_err("file.txt"));
+
+  // open an existing file with create_new
+  let err = sys
+    .fs_open(
+      "file.txt",
+      &OpenOptions {
+        create_new: true,
+        create: true,
+        write: true,
+        ..Default::default()
+      },
+    )
+    .unwrap_err();
+  assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+
+  // open existing file with truncate off
+  {
+    let mut file = sys.fs_open(
+      "file.txt",
+      &OpenOptions {
+        write: true,
+        truncate: false,
+        append: false,
+        ..Default::default()
+      },
+    )?;
+    file.write(b"t")?;
+  }
+  // now open for reading
+  {
+    let mut file = sys.fs_open("file.txt", &OpenOptions::read())?;
+    let mut text = String::new();
+    file.read_to_string(&mut text)?;
+    assert_eq!(text, "tello");
+  }
+
+  // now append with truncate off
+  {
+    let mut file = sys.fs_open(
+      "file.txt",
+      &OpenOptions {
+        write: true,
+        truncate: false,
+        append: true,
+        ..Default::default()
+      },
+    )?;
+    file.write(b" there")?;
+  }
+
+  assert_eq!(sys.fs_read_to_string("file.txt")?, "tello there");
 
   // system
   let start_time = sys.sys_time_now();
   sys.thread_sleep(Duration::from_millis(20));
   let end_time = sys.sys_time_now();
-  assert!(end_time.duration_since(start_time).unwrap() >= Duration::from_millis(20));
+  assert!(
+    end_time.duration_since(start_time).unwrap() >= Duration::from_millis(20)
+  );
 
   let err = sys.fs_read_to_string("non_existent.txt").unwrap_err();
   assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+  log("Success!");
 
   Ok(())
 }

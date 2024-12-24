@@ -51,7 +51,7 @@ impl DirectoryEntry {
       DirectoryEntry::Symlink(s) => &s.name,
     }
   }
-  
+
   fn modified_time(&self) -> SystemTime {
     match self {
       DirectoryEntry::File(f) => f.inner.read().modified_time,
@@ -116,7 +116,10 @@ impl InMemorySysInner {
     self.time.unwrap_or_else(|| RealSys.sys_time_now())
   }
 
-  fn lookup_entry<'a>(&'a self, path: &Path) -> Result<(PathBuf, &'a DirectoryEntry)> {
+  fn lookup_entry<'a>(
+    &'a self,
+    path: &Path,
+  ) -> Result<(PathBuf, &'a DirectoryEntry)> {
     match self.lookup_entry_detail(path)? {
       LookupEntry::Found(path, entry) => Ok((path, entry)),
       LookupEntry::NotFound(_) => Err(Error::new(
@@ -152,21 +155,29 @@ impl InMemorySysInner {
       let pos = match entries.binary_search_by(|e| e.name().cmp(&comp)) {
         Ok(p) => p,
         Err(_) => {
-          return Ok(LookupEntry::NotFound(final_path.into_iter().chain(comps).collect()));
+          return Ok(LookupEntry::NotFound(
+            final_path.into_iter().chain(comps).collect(),
+          ));
         }
       };
 
       match &entries[pos] {
         DirectoryEntry::Directory(dir) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
+            return Ok(LookupEntry::Found(
+              final_path.into_iter().collect(),
+              &entries[pos],
+            ));
           } else {
             entries = &dir.entries;
           }
         }
         DirectoryEntry::File(_) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
+            return Ok(LookupEntry::Found(
+              final_path.into_iter().collect(),
+              &entries[pos],
+            ));
           } else {
             return Err(Error::new(
               ErrorKind::Other,
@@ -183,7 +194,10 @@ impl InMemorySysInner {
             seen_entries.insert(current_path.clone());
           }
           if !seen_entries.insert(target_path.clone()) {
-            return Err(Error::new(ErrorKind::Other, format!("Symlink loop detected resolving '{}'", path.display())));
+            return Err(Error::new(
+              ErrorKind::Other,
+              format!("Symlink loop detected resolving '{}'", path.display()),
+            ));
           }
 
           // reset and start resolving the target path
@@ -269,7 +283,7 @@ impl InMemorySysInner {
 }
 
 /// An in-memory system implementation useful for testing.
-/// 
+///
 /// This is extremely untested and sloppily implemented. Use with extreme caution
 /// and only for testing. You will encounter bugs. Please submit fixes. I implemented
 /// this lazily and quickly.
@@ -662,16 +676,15 @@ impl FsSymlinkFile for InMemorySys {
     {
       Ok(overwrite_pos) => {
         match &parent.entries[overwrite_pos] {
-            DirectoryEntry::Directory(directory) => {
-              return Err(Error::new(
-                ErrorKind::AlreadyExists,
-                format!("Directory already exists: '{}'", directory.name),
-              ));
-            },
-            DirectoryEntry::File(_) |
-            DirectoryEntry::Symlink(_) => {
-              // do nothing
-            },
+          DirectoryEntry::Directory(directory) => {
+            return Err(Error::new(
+              ErrorKind::AlreadyExists,
+              format!("Directory already exists: '{}'", directory.name),
+            ));
+          }
+          DirectoryEntry::File(_) | DirectoryEntry::Symlink(_) => {
+            // do nothing
+          }
         }
 
         parent.entries[overwrite_pos] = DirectoryEntry::Symlink(Symlink {
@@ -685,14 +698,17 @@ impl FsSymlinkFile for InMemorySys {
         Ok(())
       }
       Err(insert_index) => {
-        parent.entries.insert(insert_index, DirectoryEntry::Symlink(Symlink {
-          name: file_name.into_owned(),
-          target: original.as_ref().to_path_buf(),
-          inner: RwLock::new(SymlinkInner {
-            created_time: time,
-            modified_time: time,
+        parent.entries.insert(
+          insert_index,
+          DirectoryEntry::Symlink(Symlink {
+            name: file_name.into_owned(),
+            target: original.as_ref().to_path_buf(),
+            inner: RwLock::new(SymlinkInner {
+              created_time: time,
+              modified_time: time,
+            }),
           }),
-        }));
+        );
         Ok(())
       }
     }
@@ -733,19 +749,29 @@ impl FsFileSetPermissions for InMemoryFile {
   }
 }
 
-impl FsFileWrite for InMemoryFile {
-  fn fs_file_write_all(
-    &mut self,
-    write: impl AsRef<[u8]>,
-  ) -> std::io::Result<()> {
+impl std::io::Write for InMemoryFile {
+  fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
     let time = self.sys.sys_time_now();
     let mut inner = self.inner.write();
-    inner
-      .data
-      .splice(self.pos.., write.as_ref().iter().cloned());
+    inner.data.splice(self.pos.., buf.as_ref().iter().cloned());
     inner.modified_time = time;
-    self.pos += write.as_ref().len();
+    self.pos += buf.as_ref().len();
+    Ok(buf.len())
+  }
+
+  fn flush(&mut self) -> std::io::Result<()> {
     Ok(())
+  }
+}
+
+impl std::io::Read for InMemoryFile {
+  fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    let inner = self.inner.read();
+    let data = &inner.data[self.pos..];
+    let len = std::cmp::min(data.len(), buf.len());
+    buf[..len].copy_from_slice(&data[..len]);
+    self.pos += len;
+    Ok(len)
   }
 }
 
@@ -821,6 +847,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::io::Write;
   use std::path::Path;
   use std::time::Duration;
   use std::time::SystemTime;
@@ -979,8 +1006,8 @@ mod tests {
     opts.append = true;
     let mut file = sys.fs_open(file_path, &opts).unwrap();
     // Should start at position 0 in the code, but let's test manually
-    file.fs_file_write_all("Appending ").unwrap();
-    file.fs_file_write_all("more data").unwrap();
+    file.write(b"Appending ").unwrap();
+    file.write(b"more data").unwrap();
 
     let contents = sys.fs_read_to_string(file_path).unwrap();
     assert_eq!(&*contents, "Appending more data");
