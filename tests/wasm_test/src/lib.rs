@@ -71,7 +71,12 @@ fn run() -> std::io::Result<()> {
   let modified_time = sys.fs_modified("file.txt")??;
   let end_time = sys.sys_time_now();
   assert!(start_time <= end_time);
-  assert!(start_time <= modified_time);
+  assert!(
+    start_time <= modified_time,
+    "{:?} <= {:?}",
+    start_time,
+    modified_time
+  );
   assert!(
     end_time >= modified_time,
     "{:?} >= {:?}",
