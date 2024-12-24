@@ -95,6 +95,8 @@ extern "C" {
   fn close_internal(this: &DenoFsFile);
   #[wasm_bindgen(method, structural, js_name = writeSync)]
   fn write_sync_internal(this: &DenoFsFile, data: &[u8]) -> usize;
+  #[wasm_bindgen(method, structural, js_name = syncSync)]
+  fn sync_internal(this: &DenoFsFile);
   #[wasm_bindgen(method, structural, js_name = readSync)]
   fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
 
@@ -182,9 +184,15 @@ impl FsCreateDirAll for RealSys {
   }
 }
 
-impl FsMetadataValue for std::fs::Metadata {
+/// A wrapper type is used in order to force usages to
+/// `use sys_traits::FsMetadataValue` so that the code
+/// compiles under Wasm.
+#[derive(Debug, Clone)]
+pub struct RealFsMetadata(std::fs::Metadata);
+
+impl FsMetadataValue for RealFsMetadata {
   fn file_type(&self) -> FileType {
-    let file_type = self.file_type();
+    let file_type = self.0.file_type();
     if file_type.is_file() {
       FileType::File
     } else if file_type.is_dir() {
@@ -196,12 +204,14 @@ impl FsMetadataValue for std::fs::Metadata {
     }
   }
 
+  #[inline]
   fn modified(&self) -> Result<SystemTime> {
-    self.modified()
+    self.0.modified()
   }
 }
 
 #[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone)]
 pub struct WasmMetadata(JsValue);
 
 #[cfg(target_arch = "wasm32")]
@@ -252,11 +262,11 @@ impl FsMetadataValue for WasmMetadata {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsMetadata for RealSys {
-  type MetadataValue = std::fs::Metadata;
+  type MetadataValue = RealFsMetadata;
 
   #[inline]
-  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<std::fs::Metadata> {
-    std::fs::metadata(path)
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<Self::MetadataValue> {
+    std::fs::metadata(path).map(RealFsMetadata)
   }
 }
 
@@ -276,14 +286,14 @@ impl FsMetadata for RealSys {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsSymlinkMetadata for RealSys {
-  type MetadataValue = std::fs::Metadata;
+  type MetadataValue = RealFsMetadata;
 
   #[inline]
   fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> Result<std::fs::Metadata> {
-    std::fs::symlink_metadata(path)
+  ) -> Result<Self::MetadataValue> {
+    std::fs::symlink_metadata(path).map(RealFsMetadata)
   }
 }
 
@@ -314,17 +324,14 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsFile for std::fs::File {}
-
-#[cfg(not(target_arch = "wasm32"))]
 impl FsOpen for RealSys {
-  type File = std::fs::File;
+  type File = RealFsFile;
 
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
     options: &OpenOptions,
-  ) -> std::io::Result<std::fs::File> {
+  ) -> std::io::Result<Self::File> {
     let mut builder = std::fs::OpenOptions::new();
     builder
       .read(options.read)
@@ -334,6 +341,7 @@ impl FsOpen for RealSys {
       .append(options.append)
       .create_new(options.create_new)
       .open(path)
+      .map(RealFsFile)
   }
 }
 
@@ -613,6 +621,55 @@ impl FsWrite for RealSys {
 
 // ==== File System File ====
 
+/// A wrapper type is used in order to force usages to
+/// `use sys_traits::FsFile` so that the code
+/// compiles under Wasm.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct RealFsFile(std::fs::File);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsFile for RealFsFile {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsFileSetPermissions for RealFsFile {
+  #[inline]
+  fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let permissions = std::fs::Permissions::from_mode(mode);
+      self.0.set_permissions(permissions)
+    }
+    #[cfg(not(unix))]
+    {
+      let _ = mode;
+      Ok(())
+    }
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::io::Write for RealFsFile {
+  #[inline]
+  fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    self.0.write(buf)
+  }
+
+  #[inline]
+  fn flush(&mut self) -> Result<()> {
+    self.0.flush()
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::io::Read for RealFsFile {
+  #[inline]
+  fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    self.0.read(buf)
+  }
+}
+
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct WasmFile {
@@ -627,24 +684,6 @@ impl FsFile for WasmFile {}
 impl Drop for WasmFile {
   fn drop(&mut self) {
     self.file.close_internal();
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsFileSetPermissions for std::fs::File {
-  #[inline]
-  fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
-    #[cfg(unix)]
-    {
-      use std::os::unix::fs::PermissionsExt;
-      let permissions = std::fs::Permissions::from_mode(mode);
-      self.set_permissions(permissions)
-    }
-    #[cfg(not(unix))]
-    {
-      let _ = mode;
-      Ok(())
-    }
   }
 }
 
@@ -665,6 +704,7 @@ impl std::io::Write for WasmFile {
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
+    self.file.sync_internal();
     Ok(())
   }
 }

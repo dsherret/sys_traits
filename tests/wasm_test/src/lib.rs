@@ -8,6 +8,7 @@ use sys_traits::EnvSetCurrentDir;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsMetadata;
+use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
 use sys_traits::FsRead;
 use sys_traits::FsReadToString;
@@ -22,9 +23,6 @@ use sys_traits::SystemTimeNow;
 use sys_traits::ThreadSleep;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
-
-#[cfg(target_arch = "wasm32")]
-use sys_traits::FsMetadataValue;
 
 #[wasm_bindgen]
 extern "C" {
@@ -82,6 +80,7 @@ fn run() -> std::io::Result<()> {
   );
 
   sys.fs_symlink_file("file.txt", "link.txt")?;
+  assert!(sys.fs_is_symlink_no_err("link.txt"));
   assert_eq!(sys.fs_read_to_string("link.txt")?, "hello");
   assert_eq!(sys.fs_canonicalize("link.txt")?, temp_dir.join("file.txt"));
   sys.fs_remove_file("link.txt")?;
