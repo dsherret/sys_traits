@@ -1,8 +1,10 @@
 # `sys_traits`
 
+WARNING: Extremely experimental and mostly untested... trying to get the high level design right first.
+
 Trait per function for system related functionality.
 
-Write functions that specify only the system functionality they need.
+Write functions that specify only the system functions they need.
 
 ```rs
 use sys_traits::FsWriteFile;
@@ -22,4 +24,8 @@ Now a caller only needs to provide a type that implements those two functions.
 
 ## Implementations
 
-Comes with a `sys_traits::imp::RealSys` implementation that implements all the traits.
+Comes with two implementations that implement all the traits.
+
+* `sys_traits::impl::RealSys` - A real implementation of the current system.
+  - Automatically works with Wasm using the `Deno` global (untested)
+* `sys_traits::impl::InMemorySys` - An in-memory system useful for testing.
