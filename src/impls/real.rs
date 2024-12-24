@@ -182,123 +182,123 @@ impl FsCreateDirAll for RealSys {
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl FsExists for RealSys {
-  #[inline]
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    std::fs::exists(path)
+impl FsMetadataValue for std::fs::Metadata {
+  fn file_type(&self) -> FileType {
+    let file_type = self.file_type();
+    if file_type.is_file() {
+      FileType::File
+    } else if file_type.is_dir() {
+      FileType::Dir
+    } else if file_type.is_symlink() {
+      FileType::Symlink
+    } else {
+      FileType::Unknown
+    }
+  }
+
+  fn modified(&self) -> Result<SystemTime> {
+    self.modified()
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsExists for RealSys {
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let path_str = path_to_str(&path.as_ref());
+pub struct WasmMetadata(JsValue);
 
-    match deno_lstat_sync(&path_str) {
-      Ok(_) => Ok(true),
-      Err(err) => {
-        let error = js_value_to_io_error(err);
-        if error.kind() == std::io::ErrorKind::NotFound {
-          Ok(false)
-        } else {
-          Err(error)
-        }
-      }
+#[cfg(target_arch = "wasm32")]
+impl FsMetadataValue for WasmMetadata {
+  fn file_type(&self) -> FileType {
+    let is_file = js_sys::Reflect::get(&self.0, &JsValue::from_str("isFile"))
+      .ok()
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    if is_file {
+      return FileType::File;
+    }
+
+    let is_directory =
+      js_sys::Reflect::get(&self.0, &JsValue::from_str("isDirectory"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_directory {
+      return FileType::Dir;
+    }
+
+    let is_symlink =
+      js_sys::Reflect::get(&self.0, &JsValue::from_str("isSymlink"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_symlink {
+      return FileType::Symlink;
+    }
+
+    FileType::Unknown
+  }
+
+  fn modified(&self) -> Result<SystemTime> {
+    let m = js_sys::Reflect::get(&self.0, &JsValue::from_str("mtime"))
+      .map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to access mtime")
+      })?;
+
+    if m.is_undefined() || m.is_null() {
+      Err(Error::new(ErrorKind::Other, "mtime not found"))
+    } else {
+      parse_date(&m)
     }
   }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsIsDir for RealSys {
+impl FsMetadata for RealSys {
+  type MetadataValue = std::fs::Metadata;
+
   #[inline]
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-    std::fs::metadata(path).map(|m| m.is_dir())
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<std::fs::Metadata> {
+    std::fs::metadata(path)
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsIsDir for RealSys {
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path_to_str(path.as_ref());
+impl FsMetadata for RealSys {
+  type MetadataValue = WasmMetadata;
 
-    match deno_stat_sync(&path_str) {
-      Ok(stat_obj) => {
-        if let Some(kind) =
-          js_sys::Reflect::get(&stat_obj, &JsValue::from_str("isDirectory"))
-            .ok()
-            .and_then(|v| v.as_bool())
-        {
-          Ok(kind)
-        } else {
-          Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to determine if the path is a directory",
-          ))
-        }
-      }
-      Err(err) => Err(js_value_to_io_error(err)),
-    }
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsIsFile for RealSys {
   #[inline]
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> Result<bool> {
-    std::fs::metadata(path).map(|m| m.is_file())
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsIsFile for RealSys {
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path_to_str(path.as_ref());
-
-    match deno_stat_sync(&path_str) {
-      Ok(stat_obj) => {
-        if let Some(is_file) =
-          js_sys::Reflect::get(&stat_obj, &JsValue::from_str("isFile"))
-            .ok()
-            .and_then(|v| v.as_bool())
-        {
-          Ok(is_file)
-        } else {
-          Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to determine if the path is a file",
-          ))
-        }
-      }
-      Err(err) => Err(js_value_to_io_error(err)),
-    }
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsModified for RealSys {
-  fn fs_modified(&self, path: impl AsRef<Path>) -> Result<Result<SystemTime>> {
-    let metadata = std::fs::metadata(path)?;
-    Ok(metadata.modified())
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsModified for RealSys {
-  fn fs_modified(&self, path: impl AsRef<Path>) -> Result<Result<SystemTime>> {
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<WasmMetadata> {
     let s = path_to_str(path.as_ref());
     match deno_stat_sync(&s) {
-      Ok(v) => {
-        let m = match js_sys::Reflect::get(&v, &JsValue::from_str("mtime")) {
-          Ok(m) => m,
-          Err(err) => return Ok(Err(js_value_to_io_error(err))),
-        };
-        if m.is_undefined() || m.is_null() {
-          Ok(Err(Error::new(ErrorKind::Other, "mtime not found")))
-        } else {
-          Ok(parse_date(&m))
-        }
-      }
+      Ok(v) => Ok(WasmMetadata(v)),
+      Err(e) => Err(js_value_to_io_error(e)),
+    }
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsSymlinkMetadata for RealSys {
+  type MetadataValue = std::fs::Metadata;
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<std::fs::Metadata> {
+    std::fs::symlink_metadata(path)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsSymlinkMetadata for RealSys {
+  type MetadataValue = WasmMetadata;
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<WasmMetadata> {
+    let s = path_to_str(path.as_ref());
+    match deno_lstat_sync(&s) {
+      Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
@@ -317,7 +317,9 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
 impl FsFile for std::fs::File {}
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsOpen<std::fs::File> for RealSys {
+impl FsOpen for RealSys {
+  type File = std::fs::File;
+
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -336,7 +338,9 @@ impl FsOpen<std::fs::File> for RealSys {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsOpen<WasmFile> for RealSys {
+impl FsOpen for RealSys {
+  type File = WasmFile;
+
   fn fs_open(
     &self,
     path: impl AsRef<Path>,

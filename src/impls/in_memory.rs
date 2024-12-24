@@ -97,6 +97,16 @@ enum LookupEntry<'a> {
   Found(PathBuf, &'a DirectoryEntry),
 }
 
+enum LookupNoFollowEntry<'a> {
+  NotFound(PathBuf),
+  Symlink {
+    current_path: PathBuf,
+    target_path: PathBuf,
+    entry: &'a Symlink,
+  },
+  Found(PathBuf, &'a DirectoryEntry),
+}
+
 #[derive(Debug)]
 struct InMemorySysInner {
   // Linux/Mac will always have one dir here, but Windows
@@ -135,9 +145,44 @@ impl InMemorySysInner {
   }
 
   fn lookup_entry_detail<'a>(&'a self, path: &Path) -> Result<LookupEntry<'a>> {
-    let mut final_path = Vec::new();
     let mut seen_entries = HashSet::new();
     let mut path = Cow::Borrowed(path);
+
+    loop {
+      match self.lookup_entry_detail_no_follow(&path)? {
+        LookupNoFollowEntry::NotFound(path) => {
+          return Ok(LookupEntry::NotFound(path));
+        }
+        LookupNoFollowEntry::Found(path, entry) => {
+          return Ok(LookupEntry::Found(path, entry));
+        }
+        LookupNoFollowEntry::Symlink {
+          current_path,
+          target_path,
+          ..
+        } => {
+          if seen_entries.is_empty() {
+            // add the original path at this point in order to avoid allocating when we
+            // don't have symlinks
+            seen_entries.insert(current_path.clone());
+          }
+          if !seen_entries.insert(target_path.clone()) {
+            return Err(Error::new(
+              ErrorKind::Other,
+              format!("Symlink loop detected resolving '{}'", path.display()),
+            ));
+          }
+          path = Cow::Owned(target_path);
+        }
+      }
+    }
+  }
+
+  fn lookup_entry_detail_no_follow<'a>(
+    &'a self,
+    path: &Path,
+  ) -> Result<LookupNoFollowEntry<'a>> {
+    let mut final_path = Vec::new();
     let mut comps = path.components().peekable();
     if comps.peek().is_none() {
       return Err(Error::new(ErrorKind::NotFound, "Empty path"));
@@ -160,7 +205,7 @@ impl InMemorySysInner {
       let pos = match entries.binary_search_by(|e| e.name().cmp(&comp)) {
         Ok(p) => p,
         Err(_) => {
-          return Ok(LookupEntry::NotFound(
+          return Ok(LookupNoFollowEntry::NotFound(
             final_path.into_iter().chain(comps).collect(),
           ));
         }
@@ -169,7 +214,7 @@ impl InMemorySysInner {
       match &entries[pos] {
         DirectoryEntry::Directory(dir) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(
+            return Ok(LookupNoFollowEntry::Found(
               final_path.into_iter().collect(),
               &entries[pos],
             ));
@@ -179,7 +224,7 @@ impl InMemorySysInner {
         }
         DirectoryEntry::File(_) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(
+            return Ok(LookupNoFollowEntry::Found(
               final_path.into_iter().collect(),
               &entries[pos],
             ));
@@ -193,28 +238,18 @@ impl InMemorySysInner {
         DirectoryEntry::Symlink(symlink) => {
           let current_path = final_path.into_iter().collect::<PathBuf>();
           let target_path = normalize_path(&current_path.join(&symlink.target));
-          if seen_entries.is_empty() {
-            // add the original path at this point in order to avoid allocating when we
-            // don't have symlinks
-            seen_entries.insert(current_path.clone());
-          }
-          if !seen_entries.insert(target_path.clone()) {
-            return Err(Error::new(
-              ErrorKind::Other,
-              format!("Symlink loop detected resolving '{}'", path.display()),
-            ));
-          }
-
-          // reset and start resolving the target path
-          final_path = Vec::new();
-          entries = &self.system_root;
-          path = Cow::Owned(target_path);
-          comps = path.components().peekable();
+          return Ok(LookupNoFollowEntry::Symlink {
+            current_path,
+            target_path,
+            entry: symlink,
+          });
         }
       }
     }
 
-    Ok(LookupEntry::NotFound(final_path.into_iter().collect()))
+    Ok(LookupNoFollowEntry::NotFound(
+      final_path.into_iter().collect(),
+    ))
   }
 
   fn find_directory_mut<'a>(
@@ -356,48 +391,75 @@ impl FsCreateDirAll for InMemorySys {
   }
 }
 
-impl FsExists for InMemorySys {
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let inner = self.0.read();
-    let lookup = inner.lookup_entry(path.as_ref());
-    Ok(lookup.is_ok())
+#[derive(Debug, Clone)]
+pub struct InMemoryMetadataValue {
+  file_type: FileType,
+  modified: SystemTime,
+}
+
+impl FsMetadataValue for InMemoryMetadataValue {
+  fn file_type(&self) -> FileType {
+    self.file_type
+  }
+
+  fn modified(&self) -> Result<SystemTime> {
+    Ok(self.modified)
   }
 }
 
-impl FsIsFile for InMemorySys {
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let inner = self.0.read();
-    let (_, entry) = inner.lookup_entry(path.as_ref())?;
-    match entry {
-      DirectoryEntry::File(_) => Ok(true),
-      _ => Ok(false),
-    }
-  }
-}
+impl FsMetadata for InMemorySys {
+  type MetadataValue = InMemoryMetadataValue;
 
-impl FsIsDir for InMemorySys {
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let inner = self.0.read();
-    let (_, entry) = inner.lookup_entry(path.as_ref())?;
-    match entry {
-      DirectoryEntry::Directory(_) => Ok(true),
-      _ => Ok(false),
-    }
-  }
-}
-
-impl FsModified for InMemorySys {
-  fn fs_modified(
+  fn fs_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<std::io::Result<SystemTime>> {
+  ) -> std::io::Result<InMemoryMetadataValue> {
     let inner = self.0.read();
     let (_, entry) = inner.lookup_entry(path.as_ref())?;
-    Ok(Ok(entry.modified_time()))
+    Ok(InMemoryMetadataValue {
+      file_type: match entry {
+        DirectoryEntry::File(_) => FileType::File,
+        DirectoryEntry::Directory(_) => FileType::Dir,
+        DirectoryEntry::Symlink(_) => FileType::Symlink,
+      },
+      modified: entry.modified_time(),
+    })
   }
 }
 
-impl FsOpen<InMemoryFile> for InMemorySys {
+impl FsSymlinkMetadata for InMemorySys {
+  type MetadataValue = InMemoryMetadataValue;
+
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<InMemoryMetadataValue> {
+    let inner = self.0.read();
+    let detail = inner.lookup_entry_detail_no_follow(path.as_ref())?;
+    match detail {
+      LookupNoFollowEntry::NotFound(path) => Err(Error::new(
+        ErrorKind::NotFound,
+        format!("Path not found: '{}'", path.display()),
+      )),
+      LookupNoFollowEntry::Symlink { entry, .. } => Ok(InMemoryMetadataValue {
+        file_type: FileType::Symlink,
+        modified: entry.inner.read().modified_time,
+      }),
+      LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadataValue {
+        file_type: match entry {
+          DirectoryEntry::File(_) => FileType::File,
+          DirectoryEntry::Directory(_) => FileType::Dir,
+          DirectoryEntry::Symlink(_) => FileType::Symlink,
+        },
+        modified: entry.modified_time(),
+      }),
+    }
+  }
+}
+
+impl FsOpen for InMemorySys {
+  type File = InMemoryFile;
+
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -939,9 +1001,7 @@ mod tests {
     sys.fs_write(file_path, b"Hi!").unwrap();
 
     // First check if we can get a valid modified time
-    let mod_result = sys.fs_modified(file_path).unwrap();
-    assert!(mod_result.is_ok());
-    let modified = mod_result.unwrap();
+    let modified = sys.fs_metadata(file_path).unwrap().modified;
 
     // Since we can't easily freeze or manipulate real time,
     // we'll just assert it's no earlier than the current system time minus some buffer.
