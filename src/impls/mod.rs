@@ -11,4 +11,4 @@ pub use real::WasmFile;
 #[cfg(target_arch = "wasm32")]
 pub type RealFsFile = WasmFile;
 #[cfg(not(target_arch = "wasm32"))]
-pub type RealFsFile = std::fs::File;
+pub type RealFsFile = real::RealFsFile;

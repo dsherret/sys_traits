@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::path::Path;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 pub mod impls;
 
@@ -61,36 +62,76 @@ pub trait FsCreateDirAll {
   fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
 }
 
-pub trait FsExists {
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool>;
-
-  fn fs_exists_no_err(&self, path: impl AsRef<Path>) -> bool {
-    self.fs_exists(path).unwrap_or(false)
-  }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileType {
+  File,
+  Dir,
+  Symlink,
+  Unknown,
 }
 
-pub trait FsIsFile {
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool>;
+pub trait FsMetadataValue {
+  fn file_type(&self) -> FileType;
+  fn modified(&self) -> std::io::Result<SystemTime>;
+}
+
+pub trait FsMetadata {
+  type MetadataValue: FsMetadataValue;
+
+  fn fs_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<Self::MetadataValue>;
+
+  fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+    Ok(self.fs_metadata(path)?.file_type() == FileType::File)
+  }
 
   fn fs_is_file_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_file(path).unwrap_or(false)
   }
-}
 
-pub trait FsIsDir {
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> std::io::Result<bool>;
+  fn fs_is_dir(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+    Ok(self.fs_metadata(path)?.file_type() == FileType::Dir)
+  }
 
   fn fs_is_dir_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_dir(path).unwrap_or(false)
   }
 }
 
-pub trait FsModified {
-  /// First result is the metadata result, second result is the `metadata.modified()` result.
-  fn fs_modified(
+pub trait FsSymlinkMetadata {
+  type MetadataValue: FsMetadataValue;
+
+  fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<std::io::Result<std::time::SystemTime>>;
+  ) -> std::io::Result<Self::MetadataValue>;
+
+  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+    match self.fs_symlink_metadata(path) {
+      Ok(_) => Ok(true),
+      Err(err) => {
+        if err.kind() == std::io::ErrorKind::NotFound {
+          Ok(false)
+        } else {
+          Err(err)
+        }
+      }
+    }
+  }
+
+  fn fs_exists_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.fs_exists(path).unwrap_or(false)
+  }
+
+  fn fs_is_symlink(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+    Ok(self.fs_symlink_metadata(path)?.file_type() == FileType::Symlink)
+  }
+
+  fn fs_is_symlink_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.fs_is_symlink(path).unwrap_or(false)
+  }
 }
 
 pub trait FsFile:
@@ -98,12 +139,14 @@ pub trait FsFile:
 {
 }
 
-pub trait FsOpen<TFile: FsFile> {
+pub trait FsOpen {
+  type File: FsFile;
+
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
     options: &OpenOptions,
-  ) -> std::io::Result<TFile>;
+  ) -> std::io::Result<Self::File>;
 }
 
 pub trait FsRead {

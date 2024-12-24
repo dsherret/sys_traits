@@ -7,16 +7,15 @@ use sys_traits::EnvCurrentDir;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsCreateDirAll;
-use sys_traits::FsExists;
-use sys_traits::FsIsDir;
-use sys_traits::FsIsFile;
-use sys_traits::FsModified;
+use sys_traits::FsMetadata;
+use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
 use sys_traits::FsRead;
 use sys_traits::FsReadToString;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSymlinkFile;
+use sys_traits::FsSymlinkMetadata;
 use sys_traits::FsWrite;
 use sys_traits::OpenOptions;
 use sys_traits::SystemRandom;
@@ -68,7 +67,7 @@ fn run() -> std::io::Result<()> {
   sys.fs_write("file.txt", "hello")?;
   assert_eq!(sys.fs_read_to_string("file.txt")?, "hello");
   assert_eq!(sys.fs_read("file.txt")?.into_owned(), b"hello");
-  let modified_time = sys.fs_modified("file.txt")??;
+  let modified_time = sys.fs_metadata("file.txt")?.modified()?;
   let end_time = sys.sys_time_now();
   assert!(start_time <= end_time);
   // some file systems have less precision than the system clock,
@@ -81,6 +80,7 @@ fn run() -> std::io::Result<()> {
   );
 
   sys.fs_symlink_file("file.txt", "link.txt")?;
+  assert!(sys.fs_is_symlink_no_err("link.txt"));
   assert_eq!(sys.fs_read_to_string("link.txt")?, "hello");
   assert_eq!(sys.fs_canonicalize("link.txt")?, temp_dir.join("file.txt"));
   sys.fs_remove_file("link.txt")?;

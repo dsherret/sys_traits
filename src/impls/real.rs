@@ -95,6 +95,8 @@ extern "C" {
   fn close_internal(this: &DenoFsFile);
   #[wasm_bindgen(method, structural, js_name = writeSync)]
   fn write_sync_internal(this: &DenoFsFile, data: &[u8]) -> usize;
+  #[wasm_bindgen(method, structural, js_name = syncSync)]
+  fn sync_internal(this: &DenoFsFile);
   #[wasm_bindgen(method, structural, js_name = readSync)]
   fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
 
@@ -182,123 +184,131 @@ impl FsCreateDirAll for RealSys {
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl FsExists for RealSys {
+/// A wrapper type is used in order to force usages to
+/// `use sys_traits::FsMetadataValue` so that the code
+/// compiles under Wasm.
+#[derive(Debug, Clone)]
+pub struct RealFsMetadata(std::fs::Metadata);
+
+impl FsMetadataValue for RealFsMetadata {
+  fn file_type(&self) -> FileType {
+    let file_type = self.0.file_type();
+    if file_type.is_file() {
+      FileType::File
+    } else if file_type.is_dir() {
+      FileType::Dir
+    } else if file_type.is_symlink() {
+      FileType::Symlink
+    } else {
+      FileType::Unknown
+    }
+  }
+
   #[inline]
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    std::fs::exists(path)
+  fn modified(&self) -> Result<SystemTime> {
+    self.0.modified()
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsExists for RealSys {
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let path_str = path_to_str(&path.as_ref());
+#[derive(Debug, Clone)]
+pub struct WasmMetadata(JsValue);
 
-    match deno_lstat_sync(&path_str) {
-      Ok(_) => Ok(true),
-      Err(err) => {
-        let error = js_value_to_io_error(err);
-        if error.kind() == std::io::ErrorKind::NotFound {
-          Ok(false)
-        } else {
-          Err(error)
-        }
-      }
+#[cfg(target_arch = "wasm32")]
+impl FsMetadataValue for WasmMetadata {
+  fn file_type(&self) -> FileType {
+    let is_file = js_sys::Reflect::get(&self.0, &JsValue::from_str("isFile"))
+      .ok()
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    if is_file {
+      return FileType::File;
+    }
+
+    let is_directory =
+      js_sys::Reflect::get(&self.0, &JsValue::from_str("isDirectory"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_directory {
+      return FileType::Dir;
+    }
+
+    let is_symlink =
+      js_sys::Reflect::get(&self.0, &JsValue::from_str("isSymlink"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_symlink {
+      return FileType::Symlink;
+    }
+
+    FileType::Unknown
+  }
+
+  fn modified(&self) -> Result<SystemTime> {
+    let m = js_sys::Reflect::get(&self.0, &JsValue::from_str("mtime"))
+      .map_err(|_| {
+        std::io::Error::new(std::io::ErrorKind::Other, "Failed to access mtime")
+      })?;
+
+    if m.is_undefined() || m.is_null() {
+      Err(Error::new(ErrorKind::Other, "mtime not found"))
+    } else {
+      parse_date(&m)
     }
   }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsIsDir for RealSys {
+impl FsMetadata for RealSys {
+  type MetadataValue = RealFsMetadata;
+
   #[inline]
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-    std::fs::metadata(path).map(|m| m.is_dir())
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<Self::MetadataValue> {
+    std::fs::metadata(path).map(RealFsMetadata)
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsIsDir for RealSys {
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path_to_str(path.as_ref());
+impl FsMetadata for RealSys {
+  type MetadataValue = WasmMetadata;
 
-    match deno_stat_sync(&path_str) {
-      Ok(stat_obj) => {
-        if let Some(kind) =
-          js_sys::Reflect::get(&stat_obj, &JsValue::from_str("isDirectory"))
-            .ok()
-            .and_then(|v| v.as_bool())
-        {
-          Ok(kind)
-        } else {
-          Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to determine if the path is a directory",
-          ))
-        }
-      }
-      Err(err) => Err(js_value_to_io_error(err)),
-    }
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsIsFile for RealSys {
   #[inline]
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> Result<bool> {
-    std::fs::metadata(path).map(|m| m.is_file())
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsIsFile for RealSys {
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path_to_str(path.as_ref());
-
-    match deno_stat_sync(&path_str) {
-      Ok(stat_obj) => {
-        if let Some(is_file) =
-          js_sys::Reflect::get(&stat_obj, &JsValue::from_str("isFile"))
-            .ok()
-            .and_then(|v| v.as_bool())
-        {
-          Ok(is_file)
-        } else {
-          Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Failed to determine if the path is a file",
-          ))
-        }
-      }
-      Err(err) => Err(js_value_to_io_error(err)),
-    }
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsModified for RealSys {
-  fn fs_modified(&self, path: impl AsRef<Path>) -> Result<Result<SystemTime>> {
-    let metadata = std::fs::metadata(path)?;
-    Ok(metadata.modified())
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsModified for RealSys {
-  fn fs_modified(&self, path: impl AsRef<Path>) -> Result<Result<SystemTime>> {
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<WasmMetadata> {
     let s = path_to_str(path.as_ref());
     match deno_stat_sync(&s) {
-      Ok(v) => {
-        let m = match js_sys::Reflect::get(&v, &JsValue::from_str("mtime")) {
-          Ok(m) => m,
-          Err(err) => return Ok(Err(js_value_to_io_error(err))),
-        };
-        if m.is_undefined() || m.is_null() {
-          Ok(Err(Error::new(ErrorKind::Other, "mtime not found")))
-        } else {
-          Ok(parse_date(&m))
-        }
-      }
+      Ok(v) => Ok(WasmMetadata(v)),
+      Err(e) => Err(js_value_to_io_error(e)),
+    }
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsSymlinkMetadata for RealSys {
+  type MetadataValue = RealFsMetadata;
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<Self::MetadataValue> {
+    std::fs::symlink_metadata(path).map(RealFsMetadata)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsSymlinkMetadata for RealSys {
+  type MetadataValue = WasmMetadata;
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<WasmMetadata> {
+    let s = path_to_str(path.as_ref());
+    match deno_lstat_sync(&s) {
+      Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
@@ -314,15 +324,14 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsFile for std::fs::File {}
+impl FsOpen for RealSys {
+  type File = RealFsFile;
 
-#[cfg(not(target_arch = "wasm32"))]
-impl FsOpen<std::fs::File> for RealSys {
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
     options: &OpenOptions,
-  ) -> std::io::Result<std::fs::File> {
+  ) -> std::io::Result<Self::File> {
     let mut builder = std::fs::OpenOptions::new();
     builder
       .read(options.read)
@@ -332,11 +341,14 @@ impl FsOpen<std::fs::File> for RealSys {
       .append(options.append)
       .create_new(options.create_new)
       .open(path)
+      .map(RealFsFile)
   }
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsOpen<WasmFile> for RealSys {
+impl FsOpen for RealSys {
+  type File = WasmFile;
+
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -609,6 +621,55 @@ impl FsWrite for RealSys {
 
 // ==== File System File ====
 
+/// A wrapper type is used in order to force usages to
+/// `use sys_traits::FsFile` so that the code
+/// compiles under Wasm.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+pub struct RealFsFile(std::fs::File);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsFile for RealFsFile {}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsFileSetPermissions for RealFsFile {
+  #[inline]
+  fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      let permissions = std::fs::Permissions::from_mode(mode);
+      self.0.set_permissions(permissions)
+    }
+    #[cfg(not(unix))]
+    {
+      let _ = mode;
+      Ok(())
+    }
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::io::Write for RealFsFile {
+  #[inline]
+  fn write(&mut self, buf: &[u8]) -> Result<usize> {
+    self.0.write(buf)
+  }
+
+  #[inline]
+  fn flush(&mut self) -> Result<()> {
+    self.0.flush()
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl std::io::Read for RealFsFile {
+  #[inline]
+  fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    self.0.read(buf)
+  }
+}
+
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct WasmFile {
@@ -623,24 +684,6 @@ impl FsFile for WasmFile {}
 impl Drop for WasmFile {
   fn drop(&mut self) {
     self.file.close_internal();
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsFileSetPermissions for std::fs::File {
-  #[inline]
-  fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
-    #[cfg(unix)]
-    {
-      use std::os::unix::fs::PermissionsExt;
-      let permissions = std::fs::Permissions::from_mode(mode);
-      self.set_permissions(permissions)
-    }
-    #[cfg(not(unix))]
-    {
-      let _ = mode;
-      Ok(())
-    }
   }
 }
 
@@ -661,6 +704,7 @@ impl std::io::Write for WasmFile {
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
+    self.file.sync_internal();
     Ok(())
   }
 }
