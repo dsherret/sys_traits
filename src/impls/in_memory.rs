@@ -24,6 +24,7 @@ pub struct InMemoryFile {
 
 #[derive(Debug)]
 struct FileInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
   data: Vec<u8>,
@@ -63,6 +64,7 @@ impl DirectoryEntry {
 
 #[derive(Debug)]
 struct SymlinkInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
 }
@@ -76,6 +78,7 @@ struct Symlink {
 
 #[derive(Debug)]
 struct DirectoryInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
 }
@@ -140,7 +143,7 @@ impl InMemorySysInner {
 
     let mut entries = &self.system_root;
     while let Some(comp) = comps.next() {
-      final_path.push(comp.clone());
+      final_path.push(comp);
       let comp = match comp {
         Component::RootDir => Cow::Borrowed(""),
         Component::Prefix(component) => {
@@ -884,9 +887,11 @@ mod tests {
     let file_path = "/rootDir/data.bin";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut opts = OpenOptions::default();
-    opts.write = true;
-    opts.truncate = true;
+    let opts = OpenOptions {
+      write: true,
+      truncate: true,
+      ..Default::default()
+    };
     let file = sys.fs_open(file_path, &opts).unwrap();
     // file is truncated at open, so should be empty
     let guard = file.inner.read();
@@ -946,9 +951,9 @@ mod tests {
   #[test]
   fn test_exists_no_err() {
     let sys = InMemorySys::default();
-    assert_eq!(sys.fs_exists_no_err("/does/not/exist"), false);
+    assert!(!sys.fs_exists_no_err("/does/not/exist"));
     sys.fs_create_dir_all("/exists").unwrap();
-    assert_eq!(sys.fs_exists_no_err("/exists"), true);
+    assert!(sys.fs_exists_no_err("/exists"));
   }
 
   #[test]
@@ -956,12 +961,9 @@ mod tests {
     let sys = InMemorySys::default();
     sys.fs_create_dir_all("/dir").unwrap();
     sys.fs_write("/dir/file.txt", b"contents").unwrap();
-    // Non-existent path
-    assert_eq!(sys.fs_is_file_no_err("/no/file"), false);
-    // Directory
-    assert_eq!(sys.fs_is_file_no_err("/dir"), false);
-    // Actual file
-    assert_eq!(sys.fs_is_file_no_err("/dir/file.txt"), true);
+    assert!(!sys.fs_is_file_no_err("/no/file"));
+    assert!(!sys.fs_is_file_no_err("/dir"));
+    assert!(sys.fs_is_file_no_err("/dir/file.txt"));
   }
 
   #[test]
@@ -969,12 +971,9 @@ mod tests {
     let sys = InMemorySys::default();
     sys.fs_create_dir_all("/dir").unwrap();
     sys.fs_write("/dir/file.txt", b"contents").unwrap();
-    // Non-existent path
-    assert_eq!(sys.fs_is_dir_no_err("/no/dir"), false);
-    // Actual directory
-    assert_eq!(sys.fs_is_dir_no_err("/dir"), true);
-    // File
-    assert_eq!(sys.fs_is_dir_no_err("/dir/file.txt"), false);
+    assert!(!sys.fs_is_dir_no_err("/no/dir"));
+    assert!(sys.fs_is_dir_no_err("/dir"));
+    assert!(!sys.fs_is_dir_no_err("/dir/file.txt"));
   }
 
   #[test]
@@ -997,17 +996,19 @@ mod tests {
     sys.fs_create_dir_all("/dir").unwrap();
 
     let file_path = "/dir/append_test.txt";
-    let mut opts = OpenOptions::default();
-    opts.write = true;
-    opts.create = true;
+    let mut opts = OpenOptions {
+      write: true,
+      create: true,
+      ..Default::default()
+    };
     // Not truncate
     sys.fs_open(file_path, &opts).unwrap(); // creates empty file
                                             // Now open again with append
     opts.append = true;
     let mut file = sys.fs_open(file_path, &opts).unwrap();
     // Should start at position 0 in the code, but let's test manually
-    file.write(b"Appending ").unwrap();
-    file.write(b"more data").unwrap();
+    _ = file.write(b"Appending ").unwrap();
+    _ = file.write(b"more data").unwrap();
 
     let contents = sys.fs_read_to_string(file_path).unwrap();
     assert_eq!(&*contents, "Appending more data");
@@ -1089,18 +1090,10 @@ mod tests {
     sys.fs_write("/dir/file1.txt", b"111").unwrap();
     sys.fs_write("/dir/file2.txt", b"222").unwrap();
     let result = sys.fs_rename("/dir/file1.txt", "/dir/file2.txt");
-    // Based on your rename logic, this should replace or fail depending on implementation.
     assert!(result.is_ok() || result.is_err());
-    // If it's successful, file1 no longer exists.
     let file1_exists = sys.fs_exists_no_err("/dir/file1.txt");
     let file2_exists = sys.fs_exists_no_err("/dir/file2.txt");
-    // We'll just confirm that either:
-    // - file2 was replaced, or
-    // - rename was disallowed and file1 still exists.
-    assert!(
-      (!file1_exists && file2_exists) || (file1_exists && file2_exists),
-      "Behavior depends on rename logic for existing file"
-    );
+    assert!(!file1_exists && file2_exists);
   }
 
   #[test]
