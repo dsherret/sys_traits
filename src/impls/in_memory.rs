@@ -22,6 +22,8 @@ pub struct InMemoryFile {
   pos: usize,
 }
 
+impl FsFile for InMemoryFile {}
+
 #[derive(Debug)]
 struct FileInner {
   #[allow(dead_code)]

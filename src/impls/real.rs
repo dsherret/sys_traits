@@ -313,6 +313,8 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
   Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
 }
 
+impl FsFile for std::fs::File {}
+
 #[cfg(not(target_arch = "wasm32"))]
 impl FsOpen<std::fs::File> for RealSys {
   fn fs_open(
@@ -605,6 +607,9 @@ pub struct WasmFile {
   file: DenoFsFile,
   path: String,
 }
+
+#[cfg(target_arch = "wasm32")]
+impl FsFile for WasmFile {}
 
 #[cfg(target_arch = "wasm32")]
 impl Drop for WasmFile {

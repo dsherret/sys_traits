@@ -93,7 +93,12 @@ pub trait FsModified {
   ) -> std::io::Result<std::io::Result<std::time::SystemTime>>;
 }
 
-pub trait FsOpen<TFile: std::io::Read + std::io::Write> {
+pub trait FsFile:
+  std::io::Read + std::io::Write + FsFileSetPermissions
+{
+}
+
+pub trait FsOpen<TFile: FsFile> {
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
