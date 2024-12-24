@@ -313,6 +313,7 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
   Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FsFile for std::fs::File {}
 
 #[cfg(not(target_arch = "wasm32"))]
