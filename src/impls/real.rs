@@ -627,7 +627,7 @@ impl FsFileSetPermissions for std::fs::File {
     {
       use std::os::unix::fs::PermissionsExt;
       let permissions = std::fs::Permissions::from_mode(mode);
-      file.set_permissions(permissions)
+      self.set_permissions(permissions)
     }
     #[cfg(not(unix))]
     {
