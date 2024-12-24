@@ -28,5 +28,7 @@ Now a caller only needs to provide a type that implements those two functions.
 Comes with two implementations that implement all the traits.
 
 - `sys_traits::impl::RealSys` - A real implementation of the current system.
-  - Automatically works with Wasm using the `Deno` global (untested)
+  - Automatically works with Wasm in Deno
+  - Will implement Node.js support once I need it
+    (https://github.com/dsherret/sys_traits/issues/4)
 - `sys_traits::impl::InMemorySys` - An in-memory system useful for testing.
