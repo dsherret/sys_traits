@@ -71,17 +71,13 @@ fn run() -> std::io::Result<()> {
   let modified_time = sys.fs_modified("file.txt")??;
   let end_time = sys.sys_time_now();
   assert!(start_time <= end_time);
+  // it seems some file systems have less precision than
+  // the system clock, so just check that it's within a second
   assert!(
-    start_time <= modified_time,
-    "{:?} <= {:?}",
-    start_time,
     modified_time
-  );
-  assert!(
-    end_time >= modified_time,
-    "{:?} >= {:?}",
-    end_time,
-    modified_time
+      .duration_since(start_time)
+      .unwrap_or_else(|_| start_time.duration_since(modified_time).unwrap())
+      < Duration::from_secs(1)
   );
 
   sys.fs_symlink_file("file.txt", "link.txt")?;
