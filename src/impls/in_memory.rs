@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::io::Result;
@@ -39,7 +40,7 @@ struct File {
 enum DirectoryEntry {
   File(File),
   Directory(Directory),
-  Symlink { name: String, target: PathBuf },
+  Symlink(Symlink),
 }
 
 impl DirectoryEntry {
@@ -47,15 +48,48 @@ impl DirectoryEntry {
     match self {
       DirectoryEntry::File(f) => &f.name,
       DirectoryEntry::Directory(d) => &d.name,
-      DirectoryEntry::Symlink { name, .. } => name,
+      DirectoryEntry::Symlink(s) => &s.name,
+    }
+  }
+  
+  fn modified_time(&self) -> SystemTime {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().modified_time,
+      DirectoryEntry::Directory(d) => d.inner.read().modified_time,
+      DirectoryEntry::Symlink(s) => s.inner.read().modified_time,
     }
   }
 }
 
 #[derive(Debug)]
+struct SymlinkInner {
+  created_time: SystemTime,
+  modified_time: SystemTime,
+}
+
+#[derive(Debug)]
+struct Symlink {
+  name: String,
+  target: PathBuf,
+  inner: RwLock<SymlinkInner>,
+}
+
+#[derive(Debug)]
+struct DirectoryInner {
+  created_time: SystemTime,
+  modified_time: SystemTime,
+}
+
+#[derive(Debug)]
 struct Directory {
   name: String,
+  inner: RwLock<DirectoryInner>,
   entries: Vec<DirectoryEntry>,
+}
+
+enum LookupEntry<'a> {
+  NotFound(PathBuf),
+  Found(PathBuf, &'a DirectoryEntry),
 }
 
 #[derive(Debug)]
@@ -72,9 +106,9 @@ struct InMemorySysInner {
 impl InMemorySysInner {
   fn to_absolute_path(&self, p: &Path) -> PathBuf {
     if p.is_absolute() {
-      p.to_path_buf()
+      normalize_path(p)
     } else {
-      self.cwd.join(p)
+      normalize_path(&self.cwd.join(p))
     }
   }
 
@@ -82,8 +116,20 @@ impl InMemorySysInner {
     self.time.unwrap_or_else(|| RealSys.sys_time_now())
   }
 
-  fn lookup_entry<'a>(&'a self, path: &Path) -> Result<&'a DirectoryEntry> {
-    // Walk each component iteratively
+  fn lookup_entry<'a>(&'a self, path: &Path) -> Result<(PathBuf, &'a DirectoryEntry)> {
+    match self.lookup_entry_detail(path)? {
+      LookupEntry::Found(path, entry) => Ok((path, entry)),
+      LookupEntry::NotFound(_) => Err(Error::new(
+        ErrorKind::NotFound,
+        format!("Path not found: '{}'", path.display()),
+      )),
+    }
+  }
+
+  fn lookup_entry_detail<'a>(&'a self, path: &Path) -> Result<LookupEntry<'a>> {
+    let mut final_path = Vec::new();
+    let mut seen_entries = HashSet::new();
+    let mut path = Cow::Borrowed(path);
     let mut comps = path.components().peekable();
     if comps.peek().is_none() {
       return Err(Error::new(ErrorKind::NotFound, "Empty path"));
@@ -91,11 +137,14 @@ impl InMemorySysInner {
 
     let mut entries = &self.system_root;
     while let Some(comp) = comps.next() {
+      final_path.push(comp.clone());
       let comp = match comp {
         Component::RootDir => Cow::Borrowed(""),
         Component::Prefix(component) => {
           let component = component.as_os_str().to_string_lossy();
-          comps.next();
+          if let Some(comp) = comps.next() {
+            final_path.push(comp);
+          }
           component
         }
         component => component.as_os_str().to_string_lossy(),
@@ -103,21 +152,21 @@ impl InMemorySysInner {
       let pos = match entries.binary_search_by(|e| e.name().cmp(&comp)) {
         Ok(p) => p,
         Err(_) => {
-          return Err(Error::new(ErrorKind::NotFound, "Path not found"));
+          return Ok(LookupEntry::NotFound(final_path.into_iter().chain(comps).collect()));
         }
       };
 
       match &entries[pos] {
         DirectoryEntry::Directory(dir) => {
           if comps.peek().is_none() {
-            return Ok(&entries[pos]);
+            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
           } else {
             entries = &dir.entries;
           }
         }
-        DirectoryEntry::File(_) | DirectoryEntry::Symlink { .. } => {
+        DirectoryEntry::File(_) => {
           if comps.peek().is_none() {
-            return Ok(&entries[pos]);
+            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
           } else {
             return Err(Error::new(
               ErrorKind::Other,
@@ -125,10 +174,28 @@ impl InMemorySysInner {
             ));
           }
         }
+        DirectoryEntry::Symlink(symlink) => {
+          let current_path = final_path.into_iter().collect::<PathBuf>();
+          let target_path = normalize_path(&current_path.join(&symlink.target));
+          if seen_entries.is_empty() {
+            // add the original path at this point in order to avoid allocating when we
+            // don't have symlinks
+            seen_entries.insert(current_path.clone());
+          }
+          if !seen_entries.insert(target_path.clone()) {
+            return Err(Error::new(ErrorKind::Other, format!("Symlink loop detected resolving '{}'", path.display())));
+          }
+
+          // reset and start resolving the target path
+          final_path = Vec::new();
+          entries = &self.system_root;
+          path = Cow::Owned(target_path);
+          comps = path.components().peekable();
+        }
       }
     }
 
-    Err(Error::new(ErrorKind::NotFound, "Path not found"))
+    Ok(LookupEntry::NotFound(final_path.into_iter().collect()))
   }
 
   fn find_directory_mut<'a>(
@@ -136,6 +203,14 @@ impl InMemorySysInner {
     path: &Path,
     create_dirs: bool,
   ) -> Result<&'a mut Directory> {
+    // ran into a lot of issues with the borrow checker... recommendation was to
+    // resolve symlinks first then resolve the path
+    let path = match self.lookup_entry_detail(path)? {
+      LookupEntry::Found(path, _) => path,
+      LookupEntry::NotFound(path) => path,
+    };
+
+    let time = self.time_now();
     let mut comps = path.components().peekable();
     if comps.peek().is_none() {
       return Err(Error::new(ErrorKind::NotFound, "Empty path"));
@@ -158,6 +233,10 @@ impl InMemorySysInner {
           if create_dirs {
             let new_dir = Directory {
               name: comp.into_owned(),
+              inner: RwLock::new(DirectoryInner {
+                created_time: time,
+                modified_time: time,
+              }),
               entries: vec![],
             };
             entries.insert(insert_pos, DirectoryEntry::Directory(new_dir));
@@ -190,6 +269,10 @@ impl InMemorySysInner {
 }
 
 /// An in-memory system implementation useful for testing.
+/// 
+/// This is extremely untested and sloppily implemented. Use with extreme caution
+/// and only for testing. You will encounter bugs. Please submit fixes. I implemented
+/// this lazily and quickly.
 #[derive(Debug, Clone)]
 pub struct InMemorySys(Arc<RwLock<InMemorySysInner>>);
 
@@ -226,12 +309,22 @@ impl EnvCurrentDir for InMemorySys {
   }
 }
 
+impl EnvSetCurrentDir for InMemorySys {
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    let path = self.fs_canonicalize(path)?; // cause an error if not exists
+    self.0.write().cwd = path;
+    Ok(())
+  }
+}
+
 // File System
 
 impl FsCanonicalize for InMemorySys {
   fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
-    let abs = self.0.read().to_absolute_path(path.as_ref());
-    Ok(abs)
+    let inner = self.0.read();
+    let path = inner.to_absolute_path(path.as_ref());
+    let (path, _) = inner.lookup_entry(&path)?;
+    Ok(path)
   }
 }
 
@@ -255,7 +348,7 @@ impl FsExists for InMemorySys {
 impl FsIsFile for InMemorySys {
   fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
     let inner = self.0.read();
-    let entry = inner.lookup_entry(path.as_ref())?;
+    let (_, entry) = inner.lookup_entry(path.as_ref())?;
     match entry {
       DirectoryEntry::File(_) => Ok(true),
       _ => Ok(false),
@@ -266,7 +359,7 @@ impl FsIsFile for InMemorySys {
 impl FsIsDir for InMemorySys {
   fn fs_is_dir(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
     let inner = self.0.read();
-    let entry = inner.lookup_entry(path.as_ref())?;
+    let (_, entry) = inner.lookup_entry(path.as_ref())?;
     match entry {
       DirectoryEntry::Directory(_) => Ok(true),
       _ => Ok(false),
@@ -280,17 +373,8 @@ impl FsModified for InMemorySys {
     path: impl AsRef<Path>,
   ) -> std::io::Result<std::io::Result<SystemTime>> {
     let inner = self.0.read();
-    let entry = inner.lookup_entry(path.as_ref())?;
-    match entry {
-      DirectoryEntry::File(f) => {
-        let inner = f.inner.read();
-        Ok(Ok(inner.modified_time))
-      }
-      _ => Ok(Err(Error::new(
-        ErrorKind::Other,
-        "Not a file or no modified time",
-      ))),
-    }
+    let (_, entry) = inner.lookup_entry(path.as_ref())?;
+    Ok(Ok(entry.modified_time()))
   }
 }
 
@@ -551,16 +635,84 @@ impl FsRename for InMemorySys {
   }
 }
 
+impl FsSymlinkDir for InMemorySys {
+  fn fs_symlink_dir(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    self.fs_symlink_file(original.as_ref(), link.as_ref())
+  }
+}
+
+impl FsSymlinkFile for InMemorySys {
+  fn fs_symlink_file(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    let mut inner = self.0.write();
+    let time = inner.time_now();
+    let link = inner.to_absolute_path(link.as_ref());
+    let parent = inner.find_directory_mut(link.parent().unwrap(), false)?;
+    let file_name = link.file_name().unwrap().to_string_lossy();
+    match parent
+      .entries
+      .binary_search_by(|e| e.name().cmp(&file_name))
+    {
+      Ok(overwrite_pos) => {
+        match &parent.entries[overwrite_pos] {
+            DirectoryEntry::Directory(directory) => {
+              return Err(Error::new(
+                ErrorKind::AlreadyExists,
+                format!("Directory already exists: '{}'", directory.name),
+              ));
+            },
+            DirectoryEntry::File(_) |
+            DirectoryEntry::Symlink(_) => {
+              // do nothing
+            },
+        }
+
+        parent.entries[overwrite_pos] = DirectoryEntry::Symlink(Symlink {
+          name: file_name.into_owned(),
+          target: original.as_ref().to_path_buf(),
+          inner: RwLock::new(SymlinkInner {
+            created_time: time,
+            modified_time: time,
+          }),
+        });
+        Ok(())
+      }
+      Err(insert_index) => {
+        parent.entries.insert(insert_index, DirectoryEntry::Symlink(Symlink {
+          name: file_name.into_owned(),
+          target: original.as_ref().to_path_buf(),
+          inner: RwLock::new(SymlinkInner {
+            created_time: time,
+            modified_time: time,
+          }),
+        }));
+        Ok(())
+      }
+    }
+  }
+}
+
 impl FsWrite for InMemorySys {
   fn fs_write(
     &self,
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
   ) -> std::io::Result<()> {
-    let mut opts = OpenOptions::default();
-    opts.write = true;
-    opts.create = true;
-    opts.truncate = true;
+    let opts = OpenOptions {
+      write: true,
+      create: true,
+      truncate: true,
+      append: false,
+      read: false,
+      create_new: false,
+    };
     let time_now = self.sys_time_now();
     let file = self.fs_open(path, &opts)?;
     let mut inner = file.inner.write();
@@ -629,6 +781,40 @@ impl ThreadSleep for InMemorySys {
       RealSys.thread_sleep(dur);
     }
   }
+}
+
+/// Normalize all intermediate components of the path (ie. remove "./" and "../" components).
+/// Similar to `fs::canonicalize()` but doesn't resolve symlinks.
+///
+/// Taken from Cargo
+/// <https://github.com/rust-lang/cargo/blob/af307a38c20a753ec60f0ad18be5abed3db3c9ac/src/cargo/util/paths.rs#L60-L85>
+#[inline]
+fn normalize_path(path: &Path) -> PathBuf {
+  let mut components = path.components().peekable();
+  let mut ret =
+    if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+      components.next();
+      PathBuf::from(c.as_os_str())
+    } else {
+      PathBuf::new()
+    };
+
+  for component in components {
+    match component {
+      Component::Prefix(..) => unreachable!(),
+      Component::RootDir => {
+        ret.push(component.as_os_str());
+      }
+      Component::CurDir => {}
+      Component::ParentDir => {
+        ret.pop();
+      }
+      Component::Normal(c) => {
+        ret.push(c);
+      }
+    }
+  }
+  ret
 }
 
 // most of these tests were lazily created with ChatGPT
@@ -828,8 +1014,8 @@ mod tests {
     let sys = InMemorySys::default();
     sys.fs_create_dir_all("/test/relative").unwrap();
     {
-      let mut guard = sys.0.write();
-      guard.cwd = PathBuf::from("/test");
+      let mut inner = sys.0.write();
+      inner.cwd = PathBuf::from("/test");
     }
     let abs = sys.fs_canonicalize("relative").unwrap();
     assert_eq!(abs, PathBuf::from("/test/relative"));

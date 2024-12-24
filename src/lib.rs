@@ -10,6 +10,10 @@ pub trait EnvCurrentDir {
   fn env_current_dir(&self) -> std::io::Result<PathBuf>;
 }
 
+pub trait EnvSetCurrentDir {
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+}
+
 // File System
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -120,6 +124,22 @@ pub trait FsRename {
     &self,
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
+  ) -> std::io::Result<()>;
+}
+
+pub trait FsSymlinkDir {
+  fn fs_symlink_dir(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+  ) -> std::io::Result<()>;
+}
+
+pub trait FsSymlinkFile {
+  fn fs_symlink_file(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
   ) -> std::io::Result<()>;
 }
 

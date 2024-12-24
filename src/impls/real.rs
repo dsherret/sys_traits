@@ -23,6 +23,8 @@ extern "C" {
   fn deno_chmod_sync(path: &str, mode: u32)
     -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
+  fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
   fn deno_cwd() -> std::result::Result<String, JsValue>;
   #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = ["Deno"], js_name = lstatSync, catch)]
   fn deno_lstat_sync(
@@ -54,6 +56,12 @@ extern "C" {
   fn deno_stat_sync(
     path: &str,
   ) -> std::result::Result<JsValue, wasm_bindgen::JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = symlinkSync, catch)]
+  fn deno_symlink_sync(
+    old_path: &str,
+    new_path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<(), wasm_bindgen::JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = writeFileSync, catch)]
   fn deno_write_file_sync(
     path: &str,
@@ -83,7 +91,7 @@ extern "C" {
   fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
 }
 
-/** Environment */
+// ==== Environment ====
 
 #[cfg(not(target_arch = "wasm32"))]
 impl EnvCurrentDir for RealSys {
@@ -101,7 +109,21 @@ impl EnvCurrentDir for RealSys {
   }
 }
 
-/** File System */
+#[cfg(not(target_arch = "wasm32"))]
+impl EnvSetCurrentDir for RealSys {
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    std::env::set_current_dir(path)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvSetCurrentDir for RealSys {
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    deno_chdir(&path.as_ref().to_string_lossy()).map_err(js_value_to_io_error)
+  }
+}
+
+// ==== File System ====
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsCanonicalize for RealSys {
@@ -399,6 +421,98 @@ impl FsRename for RealSys {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+impl FsSymlinkDir for RealSys {
+  fn fs_symlink_dir(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+      std::os::windows::fs::symlink_dir(original, link)
+    }
+    #[cfg(not(windows))]
+    {
+      std::os::unix::fs::symlink(original, link)
+    }
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsSymlinkDir for RealSys {
+  fn fs_symlink_dir(
+    &self,
+    original: impl AsRef<std::path::Path>,
+    link: impl AsRef<std::path::Path>,
+  ) -> std::io::Result<()> {
+    let old_path = original.as_ref().to_string_lossy().to_string();
+    let new_path = link.as_ref().to_string_lossy().to_string();
+
+    // Create an options object for Deno.symlinkSync specifying a directory symlink
+    let options = js_sys::Object::new();
+    js_sys::Reflect::set(
+      &options,
+      &wasm_bindgen::JsValue::from_str("type"),
+      &wasm_bindgen::JsValue::from_str("dir"),
+    )
+    .map_err(js_value_to_io_error)?;
+
+    deno_symlink_sync(
+      &old_path,
+      &new_path,
+      &wasm_bindgen::JsValue::from(options),
+    )
+    .map_err(js_value_to_io_error)
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsSymlinkFile for RealSys {
+  fn fs_symlink_file(
+    &self,
+    original: impl AsRef<Path>,
+    link: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+      std::os::windows::fs::symlink_file(original, link)
+    }
+    #[cfg(not(windows))]
+    {
+      std::os::unix::fs::symlink(original, link)
+    }
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsSymlinkFile for RealSys {
+  fn fs_symlink_file(
+    &self,
+    original: impl AsRef<std::path::Path>,
+    link: impl AsRef<std::path::Path>,
+  ) -> std::io::Result<()> {
+    let old_path = original.as_ref().to_string_lossy().to_string();
+    let new_path = link.as_ref().to_string_lossy().to_string();
+
+    // Create an options object for Deno.symlinkSync specifying a file symlink
+    let options = js_sys::Object::new();
+    js_sys::Reflect::set(
+      &options,
+      &wasm_bindgen::JsValue::from_str("type"),
+      &wasm_bindgen::JsValue::from_str("file"),
+    )
+    .map_err(js_value_to_io_error)?;
+
+    deno_symlink_sync(
+      &old_path,
+      &new_path,
+      &wasm_bindgen::JsValue::from(options),
+    )
+    .map_err(js_value_to_io_error)
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl FsWrite for RealSys {
   #[inline]
   fn fs_write(
@@ -422,7 +536,7 @@ impl FsWrite for RealSys {
   }
 }
 
-/** File System File */
+// ==== File System File ====
 
 #[cfg(target_arch = "wasm32")]
 pub struct WasmFile {
@@ -482,7 +596,7 @@ impl FsFileWrite for WasmFile {
   }
 }
 
-/** System */
+// ==== System ====
 
 #[cfg(not(target_arch = "wasm32"))]
 impl SystemTimeNow for RealSys {
