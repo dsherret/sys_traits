@@ -22,6 +22,8 @@ extern "C" {
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = chmodSync, catch)]
   fn deno_chmod_sync(path: &str, mode: u32)
     -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
+  fn deno_cwd() -> std::result::Result<String, JsValue>;
   #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = ["Deno"], js_name = lstatSync, catch)]
   fn deno_lstat_sync(
     path: &str,
@@ -79,6 +81,24 @@ extern "C" {
   fn write_sync_internal(this: &DenoFsFile, data: &[u8]) -> usize;
   #[wasm_bindgen(method, structural, js_name = readSync)]
   fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
+}
+
+/** Environment */
+
+#[cfg(not(target_arch = "wasm32"))]
+impl EnvCurrentDir for RealSys {
+  fn env_current_dir(&self) -> std::io::Result<PathBuf> {
+    std::env::current_dir()
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvCurrentDir for RealSys {
+  fn env_current_dir(&self) -> std::io::Result<PathBuf> {
+    deno_cwd()
+      .map(PathBuf::from)
+      .map_err(|err| js_value_to_io_error(err))
+  }
 }
 
 /** File System */

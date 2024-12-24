@@ -4,6 +4,12 @@ use std::path::PathBuf;
 
 pub mod impls;
 
+// Environment
+
+pub trait EnvCurrentDir {
+  fn env_current_dir(&self) -> std::io::Result<PathBuf>;
+}
+
 // File System
 
 #[derive(Default, Debug, Clone, Copy)]
