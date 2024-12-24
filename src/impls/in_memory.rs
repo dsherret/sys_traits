@@ -22,8 +22,11 @@ pub struct InMemoryFile {
   pos: usize,
 }
 
+impl FsFile for InMemoryFile {}
+
 #[derive(Debug)]
 struct FileInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
   data: Vec<u8>,
@@ -51,7 +54,7 @@ impl DirectoryEntry {
       DirectoryEntry::Symlink(s) => &s.name,
     }
   }
-  
+
   fn modified_time(&self) -> SystemTime {
     match self {
       DirectoryEntry::File(f) => f.inner.read().modified_time,
@@ -63,6 +66,7 @@ impl DirectoryEntry {
 
 #[derive(Debug)]
 struct SymlinkInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
 }
@@ -76,6 +80,7 @@ struct Symlink {
 
 #[derive(Debug)]
 struct DirectoryInner {
+  #[allow(dead_code)]
   created_time: SystemTime,
   modified_time: SystemTime,
 }
@@ -116,7 +121,10 @@ impl InMemorySysInner {
     self.time.unwrap_or_else(|| RealSys.sys_time_now())
   }
 
-  fn lookup_entry<'a>(&'a self, path: &Path) -> Result<(PathBuf, &'a DirectoryEntry)> {
+  fn lookup_entry<'a>(
+    &'a self,
+    path: &Path,
+  ) -> Result<(PathBuf, &'a DirectoryEntry)> {
     match self.lookup_entry_detail(path)? {
       LookupEntry::Found(path, entry) => Ok((path, entry)),
       LookupEntry::NotFound(_) => Err(Error::new(
@@ -137,7 +145,7 @@ impl InMemorySysInner {
 
     let mut entries = &self.system_root;
     while let Some(comp) = comps.next() {
-      final_path.push(comp.clone());
+      final_path.push(comp);
       let comp = match comp {
         Component::RootDir => Cow::Borrowed(""),
         Component::Prefix(component) => {
@@ -152,21 +160,29 @@ impl InMemorySysInner {
       let pos = match entries.binary_search_by(|e| e.name().cmp(&comp)) {
         Ok(p) => p,
         Err(_) => {
-          return Ok(LookupEntry::NotFound(final_path.into_iter().chain(comps).collect()));
+          return Ok(LookupEntry::NotFound(
+            final_path.into_iter().chain(comps).collect(),
+          ));
         }
       };
 
       match &entries[pos] {
         DirectoryEntry::Directory(dir) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
+            return Ok(LookupEntry::Found(
+              final_path.into_iter().collect(),
+              &entries[pos],
+            ));
           } else {
             entries = &dir.entries;
           }
         }
         DirectoryEntry::File(_) => {
           if comps.peek().is_none() {
-            return Ok(LookupEntry::Found(final_path.into_iter().collect(), &entries[pos]));
+            return Ok(LookupEntry::Found(
+              final_path.into_iter().collect(),
+              &entries[pos],
+            ));
           } else {
             return Err(Error::new(
               ErrorKind::Other,
@@ -183,7 +199,10 @@ impl InMemorySysInner {
             seen_entries.insert(current_path.clone());
           }
           if !seen_entries.insert(target_path.clone()) {
-            return Err(Error::new(ErrorKind::Other, format!("Symlink loop detected resolving '{}'", path.display())));
+            return Err(Error::new(
+              ErrorKind::Other,
+              format!("Symlink loop detected resolving '{}'", path.display()),
+            ));
           }
 
           // reset and start resolving the target path
@@ -269,7 +288,7 @@ impl InMemorySysInner {
 }
 
 /// An in-memory system implementation useful for testing.
-/// 
+///
 /// This is extremely untested and sloppily implemented. Use with extreme caution
 /// and only for testing. You will encounter bugs. Please submit fixes. I implemented
 /// this lazily and quickly.
@@ -662,16 +681,15 @@ impl FsSymlinkFile for InMemorySys {
     {
       Ok(overwrite_pos) => {
         match &parent.entries[overwrite_pos] {
-            DirectoryEntry::Directory(directory) => {
-              return Err(Error::new(
-                ErrorKind::AlreadyExists,
-                format!("Directory already exists: '{}'", directory.name),
-              ));
-            },
-            DirectoryEntry::File(_) |
-            DirectoryEntry::Symlink(_) => {
-              // do nothing
-            },
+          DirectoryEntry::Directory(directory) => {
+            return Err(Error::new(
+              ErrorKind::AlreadyExists,
+              format!("Directory already exists: '{}'", directory.name),
+            ));
+          }
+          DirectoryEntry::File(_) | DirectoryEntry::Symlink(_) => {
+            // do nothing
+          }
         }
 
         parent.entries[overwrite_pos] = DirectoryEntry::Symlink(Symlink {
@@ -685,14 +703,17 @@ impl FsSymlinkFile for InMemorySys {
         Ok(())
       }
       Err(insert_index) => {
-        parent.entries.insert(insert_index, DirectoryEntry::Symlink(Symlink {
-          name: file_name.into_owned(),
-          target: original.as_ref().to_path_buf(),
-          inner: RwLock::new(SymlinkInner {
-            created_time: time,
-            modified_time: time,
+        parent.entries.insert(
+          insert_index,
+          DirectoryEntry::Symlink(Symlink {
+            name: file_name.into_owned(),
+            target: original.as_ref().to_path_buf(),
+            inner: RwLock::new(SymlinkInner {
+              created_time: time,
+              modified_time: time,
+            }),
           }),
-        }));
+        );
         Ok(())
       }
     }
@@ -733,19 +754,29 @@ impl FsFileSetPermissions for InMemoryFile {
   }
 }
 
-impl FsFileWrite for InMemoryFile {
-  fn fs_file_write_all(
-    &mut self,
-    write: impl AsRef<[u8]>,
-  ) -> std::io::Result<()> {
+impl std::io::Write for InMemoryFile {
+  fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
     let time = self.sys.sys_time_now();
     let mut inner = self.inner.write();
-    inner
-      .data
-      .splice(self.pos.., write.as_ref().iter().cloned());
+    inner.data.splice(self.pos.., buf.as_ref().iter().cloned());
     inner.modified_time = time;
-    self.pos += write.as_ref().len();
+    self.pos += buf.as_ref().len();
+    Ok(buf.len())
+  }
+
+  fn flush(&mut self) -> std::io::Result<()> {
     Ok(())
+  }
+}
+
+impl std::io::Read for InMemoryFile {
+  fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    let inner = self.inner.read();
+    let data = &inner.data[self.pos..];
+    let len = std::cmp::min(data.len(), buf.len());
+    buf[..len].copy_from_slice(&data[..len]);
+    self.pos += len;
+    Ok(len)
   }
 }
 
@@ -821,6 +852,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::io::Write;
   use std::path::Path;
   use std::time::Duration;
   use std::time::SystemTime;
@@ -857,9 +889,11 @@ mod tests {
     let file_path = "/rootDir/data.bin";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut opts = OpenOptions::default();
-    opts.write = true;
-    opts.truncate = true;
+    let opts = OpenOptions {
+      write: true,
+      truncate: true,
+      ..Default::default()
+    };
     let file = sys.fs_open(file_path, &opts).unwrap();
     // file is truncated at open, so should be empty
     let guard = file.inner.read();
@@ -919,9 +953,9 @@ mod tests {
   #[test]
   fn test_exists_no_err() {
     let sys = InMemorySys::default();
-    assert_eq!(sys.fs_exists_no_err("/does/not/exist"), false);
+    assert!(!sys.fs_exists_no_err("/does/not/exist"));
     sys.fs_create_dir_all("/exists").unwrap();
-    assert_eq!(sys.fs_exists_no_err("/exists"), true);
+    assert!(sys.fs_exists_no_err("/exists"));
   }
 
   #[test]
@@ -929,12 +963,9 @@ mod tests {
     let sys = InMemorySys::default();
     sys.fs_create_dir_all("/dir").unwrap();
     sys.fs_write("/dir/file.txt", b"contents").unwrap();
-    // Non-existent path
-    assert_eq!(sys.fs_is_file_no_err("/no/file"), false);
-    // Directory
-    assert_eq!(sys.fs_is_file_no_err("/dir"), false);
-    // Actual file
-    assert_eq!(sys.fs_is_file_no_err("/dir/file.txt"), true);
+    assert!(!sys.fs_is_file_no_err("/no/file"));
+    assert!(!sys.fs_is_file_no_err("/dir"));
+    assert!(sys.fs_is_file_no_err("/dir/file.txt"));
   }
 
   #[test]
@@ -942,12 +973,9 @@ mod tests {
     let sys = InMemorySys::default();
     sys.fs_create_dir_all("/dir").unwrap();
     sys.fs_write("/dir/file.txt", b"contents").unwrap();
-    // Non-existent path
-    assert_eq!(sys.fs_is_dir_no_err("/no/dir"), false);
-    // Actual directory
-    assert_eq!(sys.fs_is_dir_no_err("/dir"), true);
-    // File
-    assert_eq!(sys.fs_is_dir_no_err("/dir/file.txt"), false);
+    assert!(!sys.fs_is_dir_no_err("/no/dir"));
+    assert!(sys.fs_is_dir_no_err("/dir"));
+    assert!(!sys.fs_is_dir_no_err("/dir/file.txt"));
   }
 
   #[test]
@@ -970,17 +998,19 @@ mod tests {
     sys.fs_create_dir_all("/dir").unwrap();
 
     let file_path = "/dir/append_test.txt";
-    let mut opts = OpenOptions::default();
-    opts.write = true;
-    opts.create = true;
+    let mut opts = OpenOptions {
+      write: true,
+      create: true,
+      ..Default::default()
+    };
     // Not truncate
     sys.fs_open(file_path, &opts).unwrap(); // creates empty file
                                             // Now open again with append
     opts.append = true;
     let mut file = sys.fs_open(file_path, &opts).unwrap();
     // Should start at position 0 in the code, but let's test manually
-    file.fs_file_write_all("Appending ").unwrap();
-    file.fs_file_write_all("more data").unwrap();
+    _ = file.write(b"Appending ").unwrap();
+    _ = file.write(b"more data").unwrap();
 
     let contents = sys.fs_read_to_string(file_path).unwrap();
     assert_eq!(&*contents, "Appending more data");
@@ -1062,18 +1092,10 @@ mod tests {
     sys.fs_write("/dir/file1.txt", b"111").unwrap();
     sys.fs_write("/dir/file2.txt", b"222").unwrap();
     let result = sys.fs_rename("/dir/file1.txt", "/dir/file2.txt");
-    // Based on your rename logic, this should replace or fail depending on implementation.
     assert!(result.is_ok() || result.is_err());
-    // If it's successful, file1 no longer exists.
     let file1_exists = sys.fs_exists_no_err("/dir/file1.txt");
     let file2_exists = sys.fs_exists_no_err("/dir/file2.txt");
-    // We'll just confirm that either:
-    // - file2 was replaced, or
-    // - rename was disallowed and file1 still exists.
-    assert!(
-      (!file1_exists && file2_exists) || (file1_exists && file2_exists),
-      "Behavior depends on rename logic for existing file"
-    );
+    assert!(!file1_exists && file2_exists);
   }
 
   #[test]

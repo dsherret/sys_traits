@@ -93,7 +93,12 @@ pub trait FsModified {
   ) -> std::io::Result<std::io::Result<std::time::SystemTime>>;
 }
 
-pub trait FsOpen<TFile> {
+pub trait FsFile:
+  std::io::Read + std::io::Write + FsFileSetPermissions
+{
+}
+
+pub trait FsOpen<TFile: FsFile> {
   fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -113,6 +118,10 @@ pub trait FsReadToString {
     &self,
     path: impl AsRef<Path>,
   ) -> std::io::Result<Cow<'static, str>>;
+}
+
+pub trait FsRemoveDirAll {
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
 }
 
 pub trait FsRemoveFile {
@@ -155,13 +164,6 @@ pub trait FsWrite {
 
 pub trait FsFileSetPermissions {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()>;
-}
-
-pub trait FsFileWrite {
-  fn fs_file_write_all(
-    &mut self,
-    write: impl AsRef<[u8]>,
-  ) -> std::io::Result<()>;
 }
 
 // System

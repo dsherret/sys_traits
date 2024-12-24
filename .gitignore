@@ -1,2 +1,4 @@
 .vscode
 /target
+tests/wasm_test/lib
+tests/wasm_test/temp
