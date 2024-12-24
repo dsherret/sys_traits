@@ -115,6 +115,10 @@ pub trait FsReadToString {
   ) -> std::io::Result<Cow<'static, str>>;
 }
 
+pub trait FsRemoveDirAll {
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+}
+
 pub trait FsRemoveFile {
   fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
 }

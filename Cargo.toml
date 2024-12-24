@@ -9,6 +9,11 @@ description = "Trait per function for system related functionality."
 [package.metadata.docs.rs]
 all-features = true
 
+[workspace]
+members = [
+  "tests/wasm_test",
+]
+
 [features]
 default = []
 serde = ["dep:serde"]

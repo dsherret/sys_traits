@@ -13,7 +13,7 @@ use wasm_bindgen::JsValue;
 
 use crate::*;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct RealSys;
 
 #[cfg(target_arch = "wasm32")]
@@ -22,7 +22,7 @@ extern "C" {
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = chmodSync, catch)]
   fn deno_chmod_sync(path: &str, mode: u32)
     -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = chdir, catch)]
   fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
   fn deno_cwd() -> std::result::Result<String, JsValue>;
@@ -47,6 +47,8 @@ extern "C" {
   fn deno_real_path_sync(path: &str) -> std::result::Result<String, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
   fn deno_remove_sync(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
+  fn deno_remove_sync_options(path: &str, options: &JsValue) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = renameSync, catch)]
   fn deno_rename_sync(
     oldpath: &str,
@@ -68,7 +70,7 @@ extern "C" {
     data: &[u8],
   ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["globalThis", "Date"], js_name = now)]
-  fn date_now() -> u64;
+  fn date_now() -> f64;
   #[wasm_bindgen(js_namespace = ["globalThis", "crypto"], js_name = getRandomValues, catch)]
   fn get_random_values(buf: &mut [u8]) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = Atomics, js_name = wait)]
@@ -89,6 +91,10 @@ extern "C" {
   fn write_sync_internal(this: &DenoFsFile, data: &[u8]) -> usize;
   #[wasm_bindgen(method, structural, js_name = readSync)]
   fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
+
+  // Deno.build
+  #[wasm_bindgen(js_namespace = Deno, js_name = build)]
+  static BUILD: JsValue;
 }
 
 // ==== Environment ====
@@ -104,7 +110,7 @@ impl EnvCurrentDir for RealSys {
 impl EnvCurrentDir for RealSys {
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
     deno_cwd()
-      .map(PathBuf::from)
+      .map(string_to_path)
       .map_err(|err| js_value_to_io_error(err))
   }
 }
@@ -119,7 +125,7 @@ impl EnvSetCurrentDir for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl EnvSetCurrentDir for RealSys {
   fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    deno_chdir(&path.as_ref().to_string_lossy()).map_err(js_value_to_io_error)
+    deno_chdir(&path_to_str(path.as_ref())).map_err(js_value_to_io_error)
   }
 }
 
@@ -136,8 +142,8 @@ impl FsCanonicalize for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsCanonicalize for RealSys {
   fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
-    deno_real_path_sync(&path.as_ref().to_string_lossy())
-      .map(PathBuf::from)
+    deno_real_path_sync(&path_to_str(path.as_ref()))
+      .map(string_to_path)
       .map_err(js_value_to_io_error)
   }
 }
@@ -153,7 +159,7 @@ impl FsCreateDirAll for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsCreateDirAll for RealSys {
   fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> Result<()> {
-    let path_str = path.as_ref().to_string_lossy().to_string();
+    let path_str = path_to_str(path.as_ref());
 
     // Create the options object for mkdirSync
     let options = js_sys::Object::new();
@@ -181,7 +187,7 @@ impl FsExists for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsExists for RealSys {
   fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
-    let path_str = path.as_ref().to_string_lossy().to_string();
+    let path_str = path_to_str(&path.as_ref());
 
     match deno_lstat_sync(&path_str) {
       Ok(_) => Ok(true),
@@ -208,7 +214,7 @@ impl FsIsDir for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsIsDir for RealSys {
   fn fs_is_dir(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path.as_ref().to_string_lossy().to_string();
+    let path_str = path_to_str(path.as_ref());
 
     match deno_stat_sync(&path_str) {
       Ok(stat_obj) => {
@@ -241,7 +247,7 @@ impl FsIsFile for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsIsFile for RealSys {
   fn fs_is_file(&self, path: impl AsRef<Path>) -> Result<bool> {
-    let path_str = path.as_ref().to_string_lossy().to_string();
+    let path_str = path_to_str(path.as_ref());
 
     match deno_stat_sync(&path_str) {
       Ok(stat_obj) => {
@@ -274,26 +280,32 @@ impl FsModified for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsModified for RealSys {
   fn fs_modified(&self, path: impl AsRef<Path>) -> Result<Result<SystemTime>> {
-    let s = path.as_ref().to_string_lossy();
+    let s = path_to_str(path.as_ref());
     match deno_stat_sync(&s) {
       Ok(v) => {
-        let m = js_sys::Reflect::get(&v, &JsValue::from_str("mtime"))
-          .map_err(js_value_to_io_error)?;
+        let m = match js_sys::Reflect::get(&v, &JsValue::from_str("mtime")) {
+          Ok(m) => m,
+          Err(err) => return Ok(Err(js_value_to_io_error(err))),
+        };
         if m.is_undefined() || m.is_null() {
           Ok(Err(Error::new(ErrorKind::Other, "mtime not found")))
         } else {
-          let ms = m
-            .as_f64()
-            .ok_or_else(|| Error::new(ErrorKind::Other, "mtime invalid"))?;
-          Ok(Ok(
-            SystemTime::UNIX_EPOCH
-              + std::time::Duration::from_millis(ms as u64),
-          ))
+          Ok(parse_date(&m))
         }
       }
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_date(value: &JsValue) -> Result<SystemTime> {
+  let date = value.dyn_ref::<js_sys::Date>().ok_or_else(|| Error::new(ErrorKind::Other, "value not a date"))?;
+  let ms = date.get_time() as u64;
+  Ok(
+    SystemTime::UNIX_EPOCH
+      + std::time::Duration::from_millis(ms),
+  )
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -322,7 +334,7 @@ impl FsOpen<WasmFile> for RealSys {
     path: impl AsRef<Path>,
     options: &OpenOptions,
   ) -> std::io::Result<WasmFile> {
-    let s = path.as_ref().to_string_lossy().to_string();
+    let s = path_to_str(path.as_ref()).into_owned();
     let js_file = deno_open_sync(&s).map_err(js_value_to_io_error)?;
     let file = js_file
       .dyn_into::<DenoFsFile>()
@@ -351,7 +363,7 @@ impl FsRead for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsRead for RealSys {
   fn fs_read(&self, path: impl AsRef<Path>) -> Result<Cow<'static, [u8]>> {
-    let s = path.as_ref().to_string_lossy();
+    let s = path_to_str(path.as_ref());
     let v = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
     let b = js_sys::Uint8Array::new(&v).to_vec();
     Ok(Cow::Owned(b))
@@ -375,9 +387,30 @@ impl FsReadToString for RealSys {
     &self,
     path: impl AsRef<Path>,
   ) -> Result<Cow<'static, str>> {
-    let s = path.as_ref().to_string_lossy();
+    let s = path_to_str(path.as_ref());
     let t = deno_read_text_file_sync(&s).map_err(js_value_to_io_error)?;
     Ok(Cow::Owned(t))
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsRemoveDirAll for RealSys {
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    std::fs::remove_dir_all(path)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsRemoveDirAll for RealSys {
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    let s = path_to_str(path.as_ref());
+    let options = js_sys::Object::new();
+    js_sys::Reflect::set(
+        &options,
+        &JsValue::from_str("recursive"),
+        &JsValue::from_bool(true),
+    );
+    deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
   }
 }
 
@@ -391,7 +424,7 @@ impl FsRemoveFile for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsRemoveFile for RealSys {
   fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    let s = path.as_ref().to_string_lossy();
+    let s = path_to_str(path.as_ref());
     deno_remove_sync(&s).map_err(js_value_to_io_error)
   }
 }
@@ -414,8 +447,8 @@ impl FsRename for RealSys {
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
   ) -> std::io::Result<()> {
-    let f = from.as_ref().to_string_lossy();
-    let t = to.as_ref().to_string_lossy();
+    let f = path_to_str(from.as_ref());
+    let t = path_to_str(to.as_ref());
     deno_rename_sync(&f, &t).map_err(js_value_to_io_error)
   }
 }
@@ -445,8 +478,8 @@ impl FsSymlinkDir for RealSys {
     original: impl AsRef<std::path::Path>,
     link: impl AsRef<std::path::Path>,
   ) -> std::io::Result<()> {
-    let old_path = original.as_ref().to_string_lossy().to_string();
-    let new_path = link.as_ref().to_string_lossy().to_string();
+    let old_path = path_to_str(original.as_ref());
+    let new_path = path_to_str(link.as_ref());
 
     // Create an options object for Deno.symlinkSync specifying a directory symlink
     let options = js_sys::Object::new();
@@ -491,8 +524,8 @@ impl FsSymlinkFile for RealSys {
     original: impl AsRef<std::path::Path>,
     link: impl AsRef<std::path::Path>,
   ) -> std::io::Result<()> {
-    let old_path = original.as_ref().to_string_lossy().to_string();
-    let new_path = link.as_ref().to_string_lossy().to_string();
+    let old_path = path_to_str(original.as_ref());
+    let new_path = path_to_str(link.as_ref());
 
     // Create an options object for Deno.symlinkSync specifying a file symlink
     let options = js_sys::Object::new();
@@ -531,7 +564,7 @@ impl FsWrite for RealSys {
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
   ) -> std::io::Result<()> {
-    let s = path.as_ref().to_string_lossy();
+    let s = path_to_str(path.as_ref());
     deno_write_file_sync(&s, data.as_ref()).map_err(js_value_to_io_error)
   }
 }
@@ -610,7 +643,7 @@ impl SystemTimeNow for RealSys {
 impl SystemTimeNow for RealSys {
   #[inline]
   fn sys_time_now(&self) -> SystemTime {
-    SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(date_now())
+    SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(date_now() as u64)
   }
 }
 
@@ -675,13 +708,23 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
     let error_name = error_obj.name();
 
     if error_name == "NotFound" {
-      return Error::new(
-        ErrorKind::NotFound,
-        error_obj
-          .message()
-          .as_string()
-          .unwrap_or_else(|| "Unknown error".to_string()),
-      );
+        return Error::new(
+          ErrorKind::NotFound,
+          error_obj
+            .message()
+            .as_string()
+            .unwrap_or_else(|| "Unknown error".to_string()),
+        );
+    } else if error_name == "AlreadyExists" {
+        return Error::new(
+          ErrorKind::AlreadyExists,
+          error_obj
+            .message()
+            .as_string()
+            .unwrap_or_else(|| "Unknown error".to_string()),
+        );
+    } else if let Some(message) = error_obj.message().as_string() {
+      return Error::new(ErrorKind::Other, message);
     }
   }
 
@@ -691,4 +734,32 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
   } else {
     Error::new(ErrorKind::Other, "An unknown JavaScript error occurred")
   }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn string_to_path(path: String) -> PathBuf {
+  if is_windows() {
+    PathBuf::from(path.replace("\\", "/"))
+  } else {
+    PathBuf::from(path)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn path_to_str(path: &Path) -> Cow<str> {
+  if is_windows() {
+    Cow::Owned(path.to_string_lossy().replace("\\", "/"))
+  } else {
+    path.to_string_lossy()
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn is_windows() -> bool {
+  static IS_WINDOWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+  *IS_WINDOWS.get_or_init(|| {
+    js_sys::Reflect::get(&BUILD, &JsValue::from_str("os"))
+      .unwrap() == "windows"
+  })
 }

@@ -1,0 +1,88 @@
+use std::time::Duration;
+
+use sys_traits::impls::RealSys;
+use sys_traits::EnvCurrentDir;
+use sys_traits::EnvSetCurrentDir;
+use sys_traits::FsCanonicalize;
+use sys_traits::FsCreateDirAll;
+use sys_traits::FsExists;
+use sys_traits::FsIsDir;
+use sys_traits::FsIsFile;
+use sys_traits::FsModified;
+use sys_traits::FsRead;
+use sys_traits::FsReadToString;
+use sys_traits::FsRemoveDirAll;
+use sys_traits::FsRemoveFile;
+use sys_traits::FsSymlinkFile;
+use sys_traits::FsWrite;
+use sys_traits::SystemRandom;
+use sys_traits::SystemTimeNow;
+use sys_traits::ThreadSleep;
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn log(s: &str);
+}
+
+#[wasm_bindgen]
+pub fn run_tests() -> Result<(), JsValue> {
+  console_error_panic_hook::set_once();
+  run().map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+}
+
+fn run() -> std::io::Result<()> {
+  let sys = RealSys::default();
+
+  sys.fs_create_dir_all("tests/wasm_test/temp/sub")?;
+
+  // random
+  let mut data = [0; 10];
+  sys.sys_random(&mut data)?;
+  assert!(data.iter().any(|&x| x != 0));
+
+  // env
+  let cwd = sys.env_current_dir()?;
+  sys.env_set_current_dir(cwd.join("tests/wasm_test"))?;
+  let test_dir = sys.env_current_dir()?;
+  assert!(test_dir.ends_with("wasm_test"));
+
+  // file system
+  assert!(sys.fs_exists_no_err(test_dir.join("src")));
+  assert!(!sys.fs_is_file_no_err(test_dir.join("src")));
+  assert!(sys.fs_is_dir_no_err(test_dir.join("src")));
+  assert!(sys.fs_is_file_no_err(test_dir.join("Cargo.toml")));
+  assert!(!sys.fs_is_dir_no_err(test_dir.join("Cargo.toml")));
+
+  let temp_dir = test_dir.join("temp");
+  sys.env_set_current_dir(&temp_dir)?;
+
+  let start_time = sys.sys_time_now();
+  sys.fs_write("file.txt", "hello")?;
+  assert_eq!(sys.fs_read_to_string("file.txt")?, "hello");
+  assert_eq!(sys.fs_read("file.txt")?.into_owned(), b"hello");
+  let modified_time = sys.fs_modified("file.txt")??;
+  let end_time = sys.sys_time_now();
+  assert!(start_time <= end_time);
+  assert!(start_time <= modified_time);
+  assert!(end_time >= modified_time);
+
+  sys.fs_symlink_file("file.txt", "link.txt")?;
+  assert_eq!(sys.fs_read_to_string("link.txt")?, "hello");
+  assert_eq!(sys.fs_canonicalize("link.txt")?, temp_dir.join("file.txt"));
+  sys.fs_remove_file("link.txt")?;
+  assert!(sys.fs_exists_no_err("link.txt"));
+
+  // system
+  let start_time = sys.sys_time_now();
+  sys.thread_sleep(Duration::from_millis(20));
+  let end_time = sys.sys_time_now();
+  assert!(end_time.duration_since(start_time).unwrap() >= Duration::from_millis(20));
+
+  let err = sys.fs_read_to_string("non_existent.txt").unwrap_err();
+  assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+  Ok(())
+}
