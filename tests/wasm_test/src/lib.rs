@@ -3,7 +3,9 @@ use std::io::Write;
 use std::time::Duration;
 
 use sys_traits::impls::RealSys;
+use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
+use sys_traits::EnvHomeDir;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetVar;
 use sys_traits::EnvVar;
@@ -153,6 +155,10 @@ fn run() -> std::io::Result<()> {
 
   let err = sys.fs_read_to_string("non_existent.txt").unwrap_err();
   assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+  // just ensure these don't panic
+  _ = sys.env_home_dir();
+  _ = sys.env_cache_dir();
 
   log("Success!");
 

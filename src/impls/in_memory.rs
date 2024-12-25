@@ -390,6 +390,18 @@ impl EnvSetVar for InMemorySys {
   }
 }
 
+impl EnvCacheDir for InMemorySys {
+  fn env_cache_dir(&self) -> Option<PathBuf> {
+    self.env_home_dir().map(|h| h.join(".cache"))
+  }
+}
+
+impl EnvHomeDir for InMemorySys {
+  fn env_home_dir(&self) -> Option<PathBuf> {
+    self.env_var("HOME").ok().map(PathBuf::from)
+  }
+}
+
 // File System
 
 impl FsCanonicalize for InMemorySys {

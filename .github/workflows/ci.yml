@@ -45,6 +45,10 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
         run: cargo clippy --all-targets --all-features
 
+      - name: Build (no default features)
+        if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'windows')
+        run: cargo build --no-default-features
+
       - name: Test
         run: cargo test --all-targets --all-features
 
