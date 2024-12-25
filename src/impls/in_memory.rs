@@ -870,18 +870,32 @@ impl SystemTimeNow for InMemorySys {
 
 impl SystemRandom for InMemorySys {
   fn sys_random(&self, buf: &mut [u8]) -> std::io::Result<()> {
+    fn random_with_seed(seed: u64, buf: &mut [u8]) {
+      // not the best, but good enough for now
+      let mut state = seed;
+      for byte in buf.iter_mut() {
+        // simple linear congruential generator
+        state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+        *byte = (state >> 24) as u8; // use the top 8 bits
+      }
+    }
+
     match self.0.read().random_seed {
       Some(seed) => {
-        // not the best, but good enough for now
-        let mut state = seed;
-        for byte in buf.iter_mut() {
-          // simple linear congruential generator
-          state = state.wrapping_mul(1664525).wrapping_add(1013904223);
-          *byte = (state >> 24) as u8; // use the top 8 bits
-        }
+        random_with_seed(seed, buf);
         Ok(())
       }
-      None => RealSys.sys_random(buf),
+      None => {
+        #[cfg(feature = "getrandom")]
+        {
+          RealSys.sys_random(buf)
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+          random_with_seed(0, buf);
+          Ok(())
+        }
+      }
     }
   }
 }

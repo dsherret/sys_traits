@@ -1,10 +1,13 @@
 use std::borrow::Cow;
-use std::io::Error;
-use std::io::ErrorKind;
 use std::io::Result;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
+
+#[cfg(target_arch = "wasm32")]
+use std::io::Error;
+#[cfg(target_arch = "wasm32")]
+use std::io::ErrorKind;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -847,7 +850,7 @@ impl SystemTimeNow for RealSys {
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "getrandom"))]
 impl crate::SystemRandom for RealSys {
   #[inline]
   fn sys_random(&self, buf: &mut [u8]) -> Result<()> {
