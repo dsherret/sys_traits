@@ -965,7 +965,8 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
 /// to Unix-style paths that work in Wasm in Rust. This is unfortunately
 /// necessary because Wasm code in Rust uses Unix-style paths and there's
 /// no way to configure it to use Windows style paths when we know we're
-/// running on Windows.
+/// running on Windows. This is not perfect, but will make things work in
+/// 99% of scenarios, which is better than not working at all.
 ///
 /// See and upvote: https://github.com/rust-lang/rust/issues/66621#issuecomment-2561279536
 pub fn wasm_string_to_path(path: String) -> PathBuf {
