@@ -568,7 +568,7 @@ impl FsDirEntry for RealFsDirEntry {
     self.0.metadata().map(RealFsMetadata)
   }
 
-  fn path(&self) -> Cow<PathBuf> {
+  fn path(&self) -> Cow<Path> {
     Cow::Owned(self.0.path())
   }
 }
@@ -647,7 +647,7 @@ impl FsDirEntry for WasmFsDirEntry {
     Ok(WasmMetadata(self.value.clone().into()))
   }
 
-  fn path(&self) -> Cow<PathBuf> {
+  fn path(&self) -> Cow<Path> {
     let name = js_sys::Reflect::get(&self.value, &JsValue::from_str("name"))
       .ok()
       .and_then(|v| v.as_string())

@@ -273,7 +273,7 @@ pub trait FsDirEntry: std::fmt::Debug {
   fn file_name(&self) -> Cow<OsStr>;
   fn file_type(&self) -> std::io::Result<FileType>;
   fn metadata(&self) -> std::io::Result<Self::Metadata>;
-  fn path(&self) -> Cow<PathBuf>;
+  fn path(&self) -> Cow<Path>;
 }
 
 pub trait FsReadDir {

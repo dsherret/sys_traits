@@ -376,7 +376,9 @@ impl InMemorySys {
     self
       .fs_create_dir_all(path.as_ref().parent().unwrap())
       .unwrap();
-    self.fs_write(path, json.to_string()).unwrap();
+    self
+      .fs_write(path, serde_json::to_string(&json).unwrap())
+      .unwrap();
   }
 }
 
@@ -624,7 +626,7 @@ impl FsReadDir for InMemorySys {
         dir
           .entries
           .iter()
-          .map(|entry| Ok(InMemoryDirEntry::new(entry)))
+          .map(|entry| Ok(InMemoryDirEntry::new(path.as_ref(), entry)))
           .collect::<Vec<_>>()
           .into_iter(),
       ),
@@ -639,14 +641,16 @@ impl FsReadDir for InMemorySys {
 #[derive(Debug)]
 pub struct InMemoryDirEntry {
   name: String,
+  path: PathBuf,
   file_type: FileType,
   modified: SystemTime,
 }
 
 impl InMemoryDirEntry {
-  fn new(entry: &DirectoryEntry) -> Self {
+  fn new(initial_path: &Path, entry: &DirectoryEntry) -> Self {
     Self {
       name: entry.name().to_string(),
+      path: initial_path.join(entry.name()),
       file_type: match entry {
         DirectoryEntry::File(_) => FileType::File,
         DirectoryEntry::Directory(_) => FileType::Dir,
@@ -675,8 +679,8 @@ impl FsDirEntry for InMemoryDirEntry {
     })
   }
 
-  fn path(&self) -> std::borrow::Cow<std::path::PathBuf> {
-    std::borrow::Cow::Owned(self.name.clone().into())
+  fn path(&self) -> std::borrow::Cow<std::path::Path> {
+    std::borrow::Cow::Borrowed(self.path.as_ref())
   }
 }
 
