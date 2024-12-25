@@ -1,8 +1,5 @@
 # `sys_traits`
 
-WARNING: Extremely experimental and mostly untested... trying to get the high
-level design right first.
-
 Trait per function for system related functionality.
 
 Write functions that specify only the system functions they need.

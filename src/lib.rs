@@ -108,12 +108,26 @@ pub trait FsCreateDirAll {
   fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileType {
   File,
   Dir,
   Symlink,
   Unknown,
+}
+
+impl From<std::fs::FileType> for FileType {
+  fn from(file_type: std::fs::FileType) -> Self {
+    if file_type.is_file() {
+      FileType::File
+    } else if file_type.is_dir() {
+      FileType::Dir
+    } else if file_type.is_symlink() {
+      FileType::Symlink
+    } else {
+      FileType::Unknown
+    }
+  }
 }
 
 pub trait FsMetadataValue {
@@ -122,12 +136,12 @@ pub trait FsMetadataValue {
 }
 
 pub trait FsMetadata {
-  type MetadataValue: FsMetadataValue;
+  type Metadata: FsMetadataValue;
 
   fn fs_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::MetadataValue>;
+  ) -> std::io::Result<Self::Metadata>;
 
   fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::File)
@@ -239,6 +253,24 @@ pub trait FsRead {
       Cow::Owned(bytes) => Ok(Cow::Owned(string_from_utf8_lossy(bytes))),
     }
   }
+}
+
+pub trait FsDirEntry {
+  type MetadataValue: FsMetadataValue;
+
+  fn file_name(&self) -> Cow<OsStr>;
+  fn file_type(&self) -> std::io::Result<FileType>;
+  fn metadata(&self) -> std::io::Result<Self::MetadataValue>;
+  fn path(&self) -> Cow<PathBuf>;
+}
+
+pub trait FsReadDir {
+  type Entry: FsDirEntry;
+
+  fn fs_read_dir(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::Entry>>>;
 }
 
 pub trait FsRemoveDirAll {
