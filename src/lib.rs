@@ -27,6 +27,23 @@ pub trait EnvVar {
       None => Err(VarError::NotPresent),
     }
   }
+
+  /// Helper to get a path from an environment variable.
+  fn env_var_path(&self, key: impl AsRef<OsStr>) -> Option<PathBuf> {
+    self
+      .env_var_os(key)
+      .and_then(|h| if h.is_empty() { None } else { Some(h) })
+      .map(|value| {
+        #[cfg(target_arch = "wasm32")]
+        {
+          impls::wasm_string_to_path(value.to_string_lossy().to_string())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+          PathBuf::from(value)
+        }
+      })
+  }
 }
 
 pub trait EnvSetVar {

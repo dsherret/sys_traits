@@ -122,7 +122,7 @@ impl EnvCurrentDir for RealSys {
 impl EnvCurrentDir for RealSys {
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
     deno_cwd()
-      .map(string_to_path)
+      .map(wasm_string_to_path)
       .map_err(|err| js_value_to_io_error(err))
   }
 }
@@ -137,7 +137,7 @@ impl EnvSetCurrentDir for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl EnvSetCurrentDir for RealSys {
   fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    deno_chdir(&path_to_str(path.as_ref())).map_err(js_value_to_io_error)
+    deno_chdir(&wasm_path_to_str(path.as_ref())).map_err(js_value_to_io_error)
   }
 }
 
@@ -189,7 +189,8 @@ impl EnvCacheDir for RealSys {
     if cfg!(target_os = "macos") {
       self.env_home_dir().map(|h| h.join("Library/Caches"))
     } else {
-      env_path_buf(self, "XDG_CACHE_HOME")
+      self
+        .env_var_path("XDG_CACHE_HOME")
         .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
     }
   }
@@ -206,12 +207,13 @@ impl EnvCacheDir for RealSys {
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
     match build_os() {
-      Os::Linux => env_path_buf(self, "XDG_CACHE_HOME")
+      Os::Linux => self
+        .env_var_path("XDG_CACHE_HOME")
         .or_else(|| self.env_home_dir().map(|home| home.join(".cache"))),
       Os::Mac => self.env_home_dir().map(|h| h.join("Library/Caches")),
-      Os::Windows => {
-        env_path_buf(self, "USERPROFILE").map(|dir| dir.join("AppData/Local"))
-      }
+      Os::Windows => self
+        .env_var_path("USERPROFILE")
+        .map(|dir| dir.join("AppData/Local")),
     }
   }
 }
@@ -244,7 +246,7 @@ impl EnvHomeDir for RealSys {
       }
     }
 
-    env_path_buf(self, "HOME").or_else(|| {
+    self.env_var_path("HOME").or_else(|| {
       // SAFETY: libc
       unsafe { fallback().map(PathBuf::from) }
     })
@@ -254,7 +256,7 @@ impl EnvHomeDir for RealSys {
 #[cfg(all(target_os = "windows", feature = "winapi"))]
 impl EnvHomeDir for RealSys {
   fn env_home_dir(&self) -> Option<PathBuf> {
-    env_path_buf(self, "USERPROFILE").or_else(|| {
+    self.env_var_path("USERPROFILE").or_else(|| {
       known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
     })
   }
@@ -264,19 +266,11 @@ impl EnvHomeDir for RealSys {
 impl EnvHomeDir for RealSys {
   fn env_home_dir(&self) -> Option<PathBuf> {
     if is_windows() {
-      env_path_buf(self, "USERPROFILE")
+      self.env_var_path("USERPROFILE")
     } else {
-      env_path_buf(self, "HOME")
+      self.env_var_path("HOME")
     }
   }
-}
-
-#[cfg(any(target_arch = "wasm32", feature = "winapi", feature = "libc"))]
-fn env_path_buf(sys: &RealSys, key: &str) -> Option<PathBuf> {
-  sys
-    .env_var_os(key)
-    .and_then(|h| if h.is_empty() { None } else { Some(h) })
-    .map(PathBuf::from)
 }
 
 // ==== File System ====
@@ -292,8 +286,8 @@ impl FsCanonicalize for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsCanonicalize for RealSys {
   fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
-    deno_real_path_sync(&path_to_str(path.as_ref()))
-      .map(string_to_path)
+    deno_real_path_sync(&wasm_path_to_str(path.as_ref()))
+      .map(wasm_string_to_path)
       .map_err(js_value_to_io_error)
   }
 }
@@ -309,7 +303,7 @@ impl FsCreateDirAll for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsCreateDirAll for RealSys {
   fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> Result<()> {
-    let path_str = path_to_str(path.as_ref());
+    let path_str = wasm_path_to_str(path.as_ref());
 
     // Create the options object for mkdirSync
     let options = js_sys::Object::new();
@@ -418,7 +412,7 @@ impl FsMetadata for RealSys {
 
   #[inline]
   fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<WasmMetadata> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     match deno_stat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
@@ -448,7 +442,7 @@ impl FsSymlinkMetadata for RealSys {
     &self,
     path: impl AsRef<Path>,
   ) -> Result<WasmMetadata> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     match deno_lstat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
@@ -496,7 +490,7 @@ impl FsOpen for RealSys {
     path: impl AsRef<Path>,
     options: &OpenOptions,
   ) -> std::io::Result<WasmFile> {
-    let s = path_to_str(path.as_ref()).into_owned();
+    let s = wasm_path_to_str(path.as_ref()).into_owned();
     let js_options = js_sys::Object::new();
     js_sys::Reflect::set(
       &js_options,
@@ -554,7 +548,7 @@ impl FsRead for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsRead for RealSys {
   fn fs_read(&self, path: impl AsRef<Path>) -> Result<Cow<'static, [u8]>> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     let v = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
     let b = js_sys::Uint8Array::new(&v).to_vec();
     Ok(Cow::Owned(b))
@@ -578,7 +572,7 @@ impl FsReadToString for RealSys {
     &self,
     path: impl AsRef<Path>,
   ) -> Result<Cow<'static, str>> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     let t = deno_read_text_file_sync(&s).map_err(js_value_to_io_error)?;
     Ok(Cow::Owned(t))
   }
@@ -594,7 +588,7 @@ impl FsRemoveDirAll for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsRemoveDirAll for RealSys {
   fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     let options = js_sys::Object::new();
     js_sys::Reflect::set(
       &options,
@@ -616,7 +610,7 @@ impl FsRemoveFile for RealSys {
 #[cfg(target_arch = "wasm32")]
 impl FsRemoveFile for RealSys {
   fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     deno_remove_sync(&s).map_err(js_value_to_io_error)
   }
 }
@@ -639,8 +633,8 @@ impl FsRename for RealSys {
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
   ) -> std::io::Result<()> {
-    let f = path_to_str(from.as_ref());
-    let t = path_to_str(to.as_ref());
+    let f = wasm_path_to_str(from.as_ref());
+    let t = wasm_path_to_str(to.as_ref());
     deno_rename_sync(&f, &t).map_err(js_value_to_io_error)
   }
 }
@@ -670,8 +664,8 @@ impl FsSymlinkDir for RealSys {
     original: impl AsRef<std::path::Path>,
     link: impl AsRef<std::path::Path>,
   ) -> std::io::Result<()> {
-    let old_path = path_to_str(original.as_ref());
-    let new_path = path_to_str(link.as_ref());
+    let old_path = wasm_path_to_str(original.as_ref());
+    let new_path = wasm_path_to_str(link.as_ref());
 
     // Create an options object for Deno.symlinkSync specifying a directory symlink
     let options = js_sys::Object::new();
@@ -716,8 +710,8 @@ impl FsSymlinkFile for RealSys {
     original: impl AsRef<std::path::Path>,
     link: impl AsRef<std::path::Path>,
   ) -> std::io::Result<()> {
-    let old_path = path_to_str(original.as_ref());
-    let new_path = path_to_str(link.as_ref());
+    let old_path = wasm_path_to_str(original.as_ref());
+    let new_path = wasm_path_to_str(link.as_ref());
 
     // Create an options object for Deno.symlinkSync specifying a file symlink
     let options = js_sys::Object::new();
@@ -756,7 +750,7 @@ impl FsWrite for RealSys {
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
   ) -> std::io::Result<()> {
-    let s = path_to_str(path.as_ref());
+    let s = wasm_path_to_str(path.as_ref());
     deno_write_file_sync(&s, data.as_ref()).map_err(js_value_to_io_error)
   }
 }
@@ -965,22 +959,51 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
   }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn string_to_path(path: String) -> PathBuf {
-  // one day we might have: https://github.com/rust-lang/rust/issues/66621#issuecomment-2561279536
-  // but for now, do this hack for windows users
-  if is_windows() {
-    PathBuf::from(path.replace("\\", "/"))
-  } else {
+/// Helper that converts a string to a path for Wasm.
+///
+/// This will handle converting Windows-style paths received from JS
+/// to Unix-style paths that work in Wasm in Rust. This is unfortunately
+/// necessary because Wasm code in Rust uses Unix-style paths and there's
+/// no way to configure it to use Windows style paths when we know we're
+/// running on Windows. This is not perfect, but will make things work in
+/// 99% of scenarios, which is better than not working at all.
+///
+/// See and upvote: https://github.com/rust-lang/rust/issues/66621#issuecomment-2561279536
+pub fn wasm_string_to_path(path: String) -> PathBuf {
+  #[cfg(target_arch = "wasm32")]
+  {
+    // one day we might have:
+    // but for now, do this hack for windows users
+    if is_windows() {
+      PathBuf::from("/").join(path.replace("\\", "/"))
+    } else {
+      PathBuf::from(path)
+    }
+  }
+  #[cfg(not(target_arch = "wasm32"))]
+  {
     PathBuf::from(path)
   }
 }
 
-#[cfg(target_arch = "wasm32")]
-fn path_to_str(path: &Path) -> Cow<str> {
-  if is_windows() {
-    Cow::Owned(path.to_string_lossy().replace("\\", "/"))
-  } else {
+/// Helper that converts a path to a string for Wasm.
+///
+/// This will convert a path to have backslashes for JS on Windows.
+///
+/// See notes on `wasm_string_to_path` for more information.
+pub fn wasm_path_to_str(path: &Path) -> Cow<str> {
+  #[cfg(target_arch = "wasm32")]
+  {
+    if is_windows() {
+      let path = path.to_string_lossy();
+      let path = path.strip_prefix('/').unwrap_or(&path);
+      Cow::Owned(path.replace("\\", "/"))
+    } else {
+      path.to_string_lossy()
+    }
+  }
+  #[cfg(not(target_arch = "wasm32"))]
+  {
     path.to_string_lossy()
   }
 }
