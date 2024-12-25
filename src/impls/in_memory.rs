@@ -591,19 +591,6 @@ impl FsRead for InMemorySys {
   }
 }
 
-impl FsReadToString for InMemorySys {
-  fn fs_read_to_string(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, str>> {
-    let bytes = self.fs_read(path)?;
-    match String::from_utf8(bytes.to_vec()) {
-      Ok(s) => Ok(Cow::Owned(s)),
-      Err(e) => Err(Error::new(ErrorKind::InvalidData, e.to_string())),
-    }
-  }
-}
-
 impl FsRemoveFile for InMemorySys {
   fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
     let mut inner = self.0.write();
