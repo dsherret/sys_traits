@@ -1,10 +1,13 @@
 use std::borrow::Cow;
-use std::io::Error;
-use std::io::ErrorKind;
 use std::io::Result;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
+
+#[cfg(target_arch = "wasm32")]
+use std::io::Error;
+#[cfg(target_arch = "wasm32")]
+use std::io::ErrorKind;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -556,29 +559,6 @@ impl FsRead for RealSys {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl FsReadToString for RealSys {
-  #[inline]
-  fn fs_read_to_string(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> Result<Cow<'static, str>> {
-    std::fs::read_to_string(path).map(Cow::Owned)
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsReadToString for RealSys {
-  fn fs_read_to_string(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> Result<Cow<'static, str>> {
-    let s = wasm_path_to_str(path.as_ref());
-    let t = deno_read_text_file_sync(&s).map_err(js_value_to_io_error)?;
-    Ok(Cow::Owned(t))
-  }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
 impl FsRemoveDirAll for RealSys {
   fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
     std::fs::remove_dir_all(path)
@@ -870,7 +850,7 @@ impl SystemTimeNow for RealSys {
   }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(not(target_arch = "wasm32"), feature = "getrandom"))]
 impl crate::SystemRandom for RealSys {
   #[inline]
   fn sys_random(&self, buf: &mut [u8]) -> Result<()> {

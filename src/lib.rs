@@ -1,7 +1,10 @@
+use core::str;
 use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io::Error;
+use std::io::ErrorKind;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -155,7 +158,7 @@ pub trait FsSymlinkMetadata {
     match self.fs_symlink_metadata(path) {
       Ok(_) => Ok(true),
       Err(err) => {
-        if err.kind() == std::io::ErrorKind::NotFound {
+        if err.kind() == ErrorKind::NotFound {
           Ok(false)
         } else {
           Err(err)
@@ -197,13 +200,45 @@ pub trait FsRead {
     &self,
     path: impl AsRef<Path>,
   ) -> std::io::Result<Cow<'static, [u8]>>;
-}
 
-pub trait FsReadToString {
   fn fs_read_to_string(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, str>>;
+  ) -> std::io::Result<Cow<'static, str>> {
+    let bytes = self.fs_read(path)?;
+    match bytes {
+      Cow::Borrowed(bytes) => str::from_utf8(bytes)
+        .map(Cow::Borrowed)
+        .map_err(|e| e.to_string()),
+      Cow::Owned(bytes) => String::from_utf8(bytes)
+        .map(Cow::Owned)
+        .map_err(|e| e.to_string()),
+    }
+    .map_err(|error_text| Error::new(ErrorKind::InvalidData, error_text))
+  }
+
+  fn fs_read_to_string_lossy(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<Cow<'static, str>> {
+    // Like String::from_utf8_lossy but operates on owned values
+    #[inline(always)]
+    fn string_from_utf8_lossy(buf: Vec<u8>) -> String {
+      match String::from_utf8_lossy(&buf) {
+        // buf contained non-utf8 chars than have been patched
+        Cow::Owned(s) => s,
+        // SAFETY: if Borrowed then the buf only contains utf8 chars,
+        // we do this instead of .into_owned() to avoid copying the input buf
+        Cow::Borrowed(_) => unsafe { String::from_utf8_unchecked(buf) },
+      }
+    }
+
+    let bytes = self.fs_read(path)?;
+    match bytes {
+      Cow::Borrowed(bytes) => Ok(String::from_utf8_lossy(bytes)),
+      Cow::Owned(bytes) => Ok(Cow::Owned(string_from_utf8_lossy(bytes))),
+    }
+  }
 }
 
 pub trait FsRemoveDirAll {

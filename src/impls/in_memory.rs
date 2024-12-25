@@ -591,19 +591,6 @@ impl FsRead for InMemorySys {
   }
 }
 
-impl FsReadToString for InMemorySys {
-  fn fs_read_to_string(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, str>> {
-    let bytes = self.fs_read(path)?;
-    match String::from_utf8(bytes.to_vec()) {
-      Ok(s) => Ok(Cow::Owned(s)),
-      Err(e) => Err(Error::new(ErrorKind::InvalidData, e.to_string())),
-    }
-  }
-}
-
 impl FsRemoveFile for InMemorySys {
   fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
     let mut inner = self.0.write();
@@ -883,18 +870,32 @@ impl SystemTimeNow for InMemorySys {
 
 impl SystemRandom for InMemorySys {
   fn sys_random(&self, buf: &mut [u8]) -> std::io::Result<()> {
+    fn random_with_seed(seed: u64, buf: &mut [u8]) {
+      // not the best, but good enough for now
+      let mut state = seed;
+      for byte in buf.iter_mut() {
+        // simple linear congruential generator
+        state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+        *byte = (state >> 24) as u8; // use the top 8 bits
+      }
+    }
+
     match self.0.read().random_seed {
       Some(seed) => {
-        // not the best, but good enough for now
-        let mut state = seed;
-        for byte in buf.iter_mut() {
-          // simple linear congruential generator
-          state = state.wrapping_mul(1664525).wrapping_add(1013904223);
-          *byte = (state >> 24) as u8; // use the top 8 bits
-        }
+        random_with_seed(seed, buf);
         Ok(())
       }
-      None => RealSys.sys_random(buf),
+      None => {
+        #[cfg(feature = "getrandom")]
+        {
+          RealSys.sys_random(buf)
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+          random_with_seed(0, buf);
+          Ok(())
+        }
+      }
     }
   }
 }
