@@ -1,5 +1,6 @@
 use std::io::Read;
 use std::io::Write;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use sys_traits::impls::RealSys;
@@ -9,16 +10,18 @@ use sys_traits::EnvHomeDir;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetVar;
 use sys_traits::EnvVar;
+use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsCreateDirAll;
+use sys_traits::FsDirEntry;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
 use sys_traits::FsRead;
+use sys_traits::FsReadDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSymlinkFile;
-use sys_traits::FsSymlinkMetadata;
 use sys_traits::FsWrite;
 use sys_traits::OpenOptions;
 use sys_traits::SystemRandom;
@@ -158,6 +161,17 @@ fn run() -> std::io::Result<()> {
   // just ensure these don't panic
   _ = sys.env_home_dir();
   _ = sys.env_cache_dir();
+
+  let entries = sys.fs_read_dir(".")?;
+  let mut entries = entries.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>();
+  entries.sort_by_key(|e| e.file_name().to_string_lossy().to_string());
+  assert_eq!(entries.len(), 2);
+  assert_eq!(entries[0].file_name().to_string_lossy(), "file.txt");
+  assert_eq!(entries[0].file_type().unwrap(), FileType::File);
+  assert_eq!(entries[0].path().to_path_buf(), PathBuf::from("./file.txt")); // because . was provided
+  assert_eq!(entries[0].metadata().unwrap().file_type(), FileType::File);
+  assert_eq!(entries[1].file_name().to_string_lossy(), "sub");
+  assert_eq!(entries[1].file_type().unwrap(), FileType::Dir);
 
   log("Success!");
 

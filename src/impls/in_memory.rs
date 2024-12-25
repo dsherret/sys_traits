@@ -358,6 +358,28 @@ impl InMemorySys {
   pub fn disable_thread_sleep(&self) {
     self.0.write().thread_sleep_enabled = false;
   }
+
+  pub fn fs_insert(&self, path: impl AsRef<Path>, data: impl AsRef<[u8]>) {
+    self
+      .fs_create_dir_all(path.as_ref().parent().unwrap())
+      .unwrap();
+    self.fs_write(path, data).unwrap();
+  }
+
+  /// Helper method for inserting json into the in-memory file system.
+  #[cfg(feature = "serde_json")]
+  pub fn fs_insert_json(
+    &self,
+    path: impl AsRef<Path>,
+    json: serde_json::Value,
+  ) {
+    self
+      .fs_create_dir_all(path.as_ref().parent().unwrap())
+      .unwrap();
+    self
+      .fs_write(path, serde_json::to_string(&json).unwrap())
+      .unwrap();
+  }
 }
 
 impl EnvCurrentDir for InMemorySys {
@@ -423,12 +445,12 @@ impl FsCreateDirAll for InMemorySys {
 }
 
 #[derive(Debug, Clone)]
-pub struct InMemoryMetadataValue {
+pub struct InMemoryMetadata {
   file_type: FileType,
   modified: SystemTime,
 }
 
-impl FsMetadataValue for InMemoryMetadataValue {
+impl FsMetadataValue for InMemoryMetadata {
   fn file_type(&self) -> FileType {
     self.file_type
   }
@@ -439,15 +461,15 @@ impl FsMetadataValue for InMemoryMetadataValue {
 }
 
 impl FsMetadata for InMemorySys {
-  type MetadataValue = InMemoryMetadataValue;
+  type Metadata = InMemoryMetadata;
 
   fn fs_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<InMemoryMetadataValue> {
+  ) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
     let (_, entry) = inner.lookup_entry(path.as_ref())?;
-    Ok(InMemoryMetadataValue {
+    Ok(InMemoryMetadata {
       file_type: match entry {
         DirectoryEntry::File(_) => FileType::File,
         DirectoryEntry::Directory(_) => FileType::Dir,
@@ -456,15 +478,11 @@ impl FsMetadata for InMemorySys {
       modified: entry.modified_time(),
     })
   }
-}
-
-impl FsSymlinkMetadata for InMemorySys {
-  type MetadataValue = InMemoryMetadataValue;
 
   fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<InMemoryMetadataValue> {
+  ) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
     let detail = inner.lookup_entry_detail_no_follow(path.as_ref())?;
     match detail {
@@ -472,11 +490,11 @@ impl FsSymlinkMetadata for InMemorySys {
         ErrorKind::NotFound,
         format!("Path not found: '{}'", path.display()),
       )),
-      LookupNoFollowEntry::Symlink { entry, .. } => Ok(InMemoryMetadataValue {
+      LookupNoFollowEntry::Symlink { entry, .. } => Ok(InMemoryMetadata {
         file_type: FileType::Symlink,
         modified: entry.inner.read().modified_time,
       }),
-      LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadataValue {
+      LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadata {
         file_type: match entry {
           DirectoryEntry::File(_) => FileType::File,
           DirectoryEntry::Directory(_) => FileType::Dir,
@@ -588,6 +606,81 @@ impl FsRead for InMemorySys {
     let arc_file = self.fs_open(path, &OpenOptions::read())?;
     let inner = arc_file.inner.read();
     Ok(Cow::Owned(inner.data.clone()))
+  }
+}
+
+impl FsReadDir for InMemorySys {
+  type ReadDirEntry = InMemoryDirEntry;
+
+  fn fs_read_dir(
+    &self,
+    path: impl AsRef<std::path::Path>,
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
+    let inner = self.0.read();
+    let abs_path = inner.to_absolute_path(path.as_ref());
+
+    let (_, entry) = inner.lookup_entry(&abs_path)?;
+    match entry {
+      DirectoryEntry::Directory(dir) => Ok(
+        dir
+          .entries
+          .iter()
+          .map(|entry| Ok(InMemoryDirEntry::new(path.as_ref(), entry)))
+          .collect::<Vec<_>>()
+          .into_iter(),
+      ),
+      _ => Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Path is not a directory",
+      )),
+    }
+  }
+}
+
+#[derive(Debug)]
+pub struct InMemoryDirEntry {
+  name: String,
+  path: PathBuf,
+  file_type: FileType,
+  modified: SystemTime,
+}
+
+impl InMemoryDirEntry {
+  fn new(initial_path: &Path, entry: &DirectoryEntry) -> Self {
+    Self {
+      name: entry.name().to_string(),
+      path: initial_path.join(entry.name()),
+      file_type: match entry {
+        DirectoryEntry::File(_) => FileType::File,
+        DirectoryEntry::Directory(_) => FileType::Dir,
+        DirectoryEntry::Symlink(_) => FileType::Symlink,
+      },
+      modified: entry.modified_time(),
+    }
+  }
+}
+
+impl FsDirEntry for InMemoryDirEntry {
+  type Metadata = InMemoryMetadata;
+
+  fn file_name(&self) -> std::borrow::Cow<std::ffi::OsStr> {
+    std::borrow::Cow::Owned(self.name.clone().into())
+  }
+
+  fn file_type(&self) -> std::io::Result<FileType> {
+    Ok(self.file_type)
+  }
+
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
+    Ok(InMemoryMetadata {
+      file_type: self.file_type,
+      modified: self.modified,
+    })
+  }
+
+  fn path(&self) -> std::borrow::Cow<std::path::Path> {
+    std::borrow::Cow::Borrowed(self.path.as_ref())
   }
 }
 
@@ -1205,5 +1298,93 @@ mod tests {
       result.is_err(),
       "Should fail because /no-such-subdir does not exist"
     );
+  }
+
+  #[test]
+  fn test_fs_read_dir_with_files() {
+    let sys = InMemorySys::default();
+    let root_dir = "/test";
+
+    // Setup directories and files
+    sys.fs_create_dir_all(root_dir).unwrap();
+    sys
+      .fs_write(format!("{}/file1.txt", root_dir), b"Content 1")
+      .unwrap();
+    sys
+      .fs_write(format!("{}/file2.txt", root_dir), b"Content 2")
+      .unwrap();
+
+    // Read directory
+    let entries: Vec<_> = sys
+      .fs_read_dir(root_dir)
+      .unwrap()
+      .map(|res| res.unwrap().file_name().to_string_lossy().to_string())
+      .collect();
+
+    assert_eq!(entries.len(), 2);
+    assert!(entries.contains(&"file1.txt".to_string()));
+    assert!(entries.contains(&"file2.txt".to_string()));
+  }
+
+  #[test]
+  fn test_fs_read_dir_with_subdirectories() {
+    let sys = InMemorySys::default();
+    let root_dir = "/test";
+
+    // Setup directories and files
+    sys
+      .fs_create_dir_all(format!("{}/subdir", root_dir))
+      .unwrap();
+    sys
+      .fs_write(format!("{}/subdir/file.txt", root_dir), b"Content")
+      .unwrap();
+
+    // Read root directory
+    let entries: Vec<_> = sys
+      .fs_read_dir(root_dir)
+      .unwrap()
+      .map(|res| res.unwrap().file_name().to_string_lossy().to_string())
+      .collect();
+
+    assert_eq!(entries.len(), 1);
+    assert!(entries.contains(&"subdir".to_string()));
+  }
+
+  #[test]
+  fn test_fs_read_dir_not_a_directory() {
+    let sys = InMemorySys::default();
+    let file_path = "/file.txt";
+
+    // Create a file
+    sys.fs_create_dir_all("/").unwrap();
+    sys.fs_write(file_path, b"Content").unwrap();
+
+    // Attempt to read as directory
+    let result = sys.fs_read_dir(file_path);
+    assert!(result.is_err());
+    match result {
+      Err(err) => {
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
+      }
+      _ => panic!("Expected an error"),
+    }
+  }
+
+  #[test]
+  fn test_fs_read_dir_empty_directory() {
+    let sys = InMemorySys::default();
+    let empty_dir = "/empty";
+
+    // Create an empty directory
+    sys.fs_create_dir_all(empty_dir).unwrap();
+
+    // Read directory
+    let entries: Vec<_> = sys
+      .fs_read_dir(empty_dir)
+      .unwrap()
+      .map(|res| res.unwrap().file_name().to_string_lossy().to_string())
+      .collect();
+
+    assert!(entries.is_empty());
   }
 }

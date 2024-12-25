@@ -49,6 +49,10 @@ extern "C" {
   fn deno_read_text_file_sync(
     path: &str,
   ) -> std::result::Result<String, JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readDirSync, catch)]
+  fn deno_read_dir_sync(
+    path: &str,
+  ) -> std::result::Result<js_sys::Iterator, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = realPathSync, catch)]
   fn deno_real_path_sync(path: &str) -> std::result::Result<String, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
@@ -331,21 +335,45 @@ pub struct RealFsMetadata(std::fs::Metadata);
 
 impl FsMetadataValue for RealFsMetadata {
   fn file_type(&self) -> FileType {
-    let file_type = self.0.file_type();
-    if file_type.is_file() {
-      FileType::File
-    } else if file_type.is_dir() {
-      FileType::Dir
-    } else if file_type.is_symlink() {
-      FileType::Symlink
-    } else {
-      FileType::Unknown
-    }
+    self.0.file_type().into()
   }
 
   #[inline]
   fn modified(&self) -> Result<SystemTime> {
     self.0.modified()
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<&JsValue> for FileType {
+  fn from(value: &JsValue) -> Self {
+    let is_file = js_sys::Reflect::get(value, &JsValue::from_str("isFile"))
+      .ok()
+      .and_then(|v| v.as_bool())
+      .unwrap_or(false);
+    if is_file {
+      return FileType::File;
+    }
+
+    let is_directory =
+      js_sys::Reflect::get(value, &JsValue::from_str("isDirectory"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_directory {
+      return FileType::Dir;
+    }
+
+    let is_symlink =
+      js_sys::Reflect::get(value, &JsValue::from_str("isSymlink"))
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_symlink {
+      return FileType::Symlink;
+    }
+
+    FileType::Unknown
   }
 }
 
@@ -356,33 +384,7 @@ pub struct WasmMetadata(JsValue);
 #[cfg(target_arch = "wasm32")]
 impl FsMetadataValue for WasmMetadata {
   fn file_type(&self) -> FileType {
-    let is_file = js_sys::Reflect::get(&self.0, &JsValue::from_str("isFile"))
-      .ok()
-      .and_then(|v| v.as_bool())
-      .unwrap_or(false);
-    if is_file {
-      return FileType::File;
-    }
-
-    let is_directory =
-      js_sys::Reflect::get(&self.0, &JsValue::from_str("isDirectory"))
-        .ok()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if is_directory {
-      return FileType::Dir;
-    }
-
-    let is_symlink =
-      js_sys::Reflect::get(&self.0, &JsValue::from_str("isSymlink"))
-        .ok()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if is_symlink {
-      return FileType::Symlink;
-    }
-
-    FileType::Unknown
+    (&self.0).into()
   }
 
   fn modified(&self) -> Result<SystemTime> {
@@ -401,17 +403,25 @@ impl FsMetadataValue for WasmMetadata {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsMetadata for RealSys {
-  type MetadataValue = RealFsMetadata;
+  type Metadata = RealFsMetadata;
 
   #[inline]
-  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<Self::MetadataValue> {
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<Self::Metadata> {
     std::fs::metadata(path).map(RealFsMetadata)
+  }
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<Self::Metadata> {
+    std::fs::symlink_metadata(path).map(RealFsMetadata)
   }
 }
 
 #[cfg(target_arch = "wasm32")]
 impl FsMetadata for RealSys {
-  type MetadataValue = WasmMetadata;
+  type Metadata = WasmMetadata;
 
   #[inline]
   fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<WasmMetadata> {
@@ -421,24 +431,6 @@ impl FsMetadata for RealSys {
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsSymlinkMetadata for RealSys {
-  type MetadataValue = RealFsMetadata;
-
-  #[inline]
-  fn fs_symlink_metadata(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> Result<Self::MetadataValue> {
-    std::fs::symlink_metadata(path).map(RealFsMetadata)
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsSymlinkMetadata for RealSys {
-  type MetadataValue = WasmMetadata;
 
   #[inline]
   fn fs_symlink_metadata(
@@ -555,6 +547,112 @@ impl FsRead for RealSys {
     let v = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
     let b = js_sys::Uint8Array::new(&v).to_vec();
     Ok(Cow::Owned(b))
+  }
+}
+
+#[derive(Debug)]
+pub struct RealFsDirEntry(std::fs::DirEntry);
+
+impl FsDirEntry for RealFsDirEntry {
+  type Metadata = RealFsMetadata;
+
+  fn file_name(&self) -> Cow<OsStr> {
+    Cow::Owned(self.0.file_name())
+  }
+
+  fn file_type(&self) -> std::io::Result<FileType> {
+    self.0.file_type().map(FileType::from)
+  }
+
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
+    self.0.metadata().map(RealFsMetadata)
+  }
+
+  fn path(&self) -> Cow<Path> {
+    Cow::Owned(self.0.path())
+  }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl FsReadDir for RealSys {
+  type ReadDirEntry = RealFsDirEntry;
+
+  #[inline]
+  fn fs_read_dir(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
+    let iterator = std::fs::read_dir(path)?;
+    Ok(iterator.map(|result| result.map(RealFsDirEntry)))
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsReadDir for RealSys {
+  type ReadDirEntry = WasmFsDirEntry;
+
+  fn fs_read_dir(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
+    let path_str = wasm_path_to_str(path.as_ref());
+
+    // Use Deno.readDirSync to get directory entries
+    let entries =
+      deno_read_dir_sync(&path_str).map_err(js_value_to_io_error)?;
+
+    let path = path.as_ref().to_path_buf();
+    Ok(entries.into_iter().map(move |entry| {
+      entry
+        .map_err(|_| {
+          Error::new(ErrorKind::Other, "Failed to iterate over entries")
+        })
+        .and_then(|value| {
+          Ok(WasmFsDirEntry {
+            value,
+            parent_path: path.clone(),
+          })
+        })
+    }))
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug)]
+pub struct WasmFsDirEntry {
+  parent_path: PathBuf,
+  value: JsValue,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl FsDirEntry for WasmFsDirEntry {
+  type Metadata = WasmMetadata;
+
+  fn file_name(&self) -> Cow<OsStr> {
+    let name = js_sys::Reflect::get(&self.value, &JsValue::from_str("name"))
+      .ok()
+      .and_then(|v| v.as_string())
+      .unwrap_or_default();
+    Cow::Owned(OsString::from(name))
+  }
+
+  fn file_type(&self) -> std::io::Result<FileType> {
+    Ok((&self.value).into())
+  }
+
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
+    // Use the same `self.inner` for metadata as it includes file stats
+    Ok(WasmMetadata(self.value.clone().into()))
+  }
+
+  fn path(&self) -> Cow<Path> {
+    let name = js_sys::Reflect::get(&self.value, &JsValue::from_str("name"))
+      .ok()
+      .and_then(|v| v.as_string())
+      .unwrap_or_default();
+    Cow::Owned(self.parent_path.join(name))
   }
 }
 
