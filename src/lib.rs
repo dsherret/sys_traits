@@ -116,6 +116,20 @@ pub enum FileType {
   Unknown,
 }
 
+impl FileType {
+  pub fn is_dir(&self) -> bool {
+    *self == Self::Dir
+  }
+
+  pub fn is_file(&self) -> bool {
+    *self == Self::File
+  }
+
+  pub fn is_symlink(&self) -> bool {
+    *self == Self::Symlink
+  }
+}
+
 impl From<std::fs::FileType> for FileType {
   fn from(file_type: std::fs::FileType) -> Self {
     if file_type.is_file() {
@@ -130,15 +144,22 @@ impl From<std::fs::FileType> for FileType {
   }
 }
 
-pub trait FsMetadataValue {
+pub trait FsMetadataValue: std::fmt::Debug {
   fn file_type(&self) -> FileType;
   fn modified(&self) -> std::io::Result<SystemTime>;
 }
 
+/// These two functions are so cloesly related that it becomes verbose to
+/// separate them out into two traits.
 pub trait FsMetadata {
   type Metadata: FsMetadataValue;
 
   fn fs_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<Self::Metadata>;
+
+  fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
   ) -> std::io::Result<Self::Metadata>;
@@ -158,15 +179,6 @@ pub trait FsMetadata {
   fn fs_is_dir_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_dir(path).unwrap_or(false)
   }
-}
-
-pub trait FsSymlinkMetadata {
-  type MetadataValue: FsMetadataValue;
-
-  fn fs_symlink_metadata(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::MetadataValue>;
 
   fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
     match self.fs_symlink_metadata(path) {
@@ -255,22 +267,22 @@ pub trait FsRead {
   }
 }
 
-pub trait FsDirEntry {
-  type MetadataValue: FsMetadataValue;
+pub trait FsDirEntry: std::fmt::Debug {
+  type Metadata: FsMetadataValue;
 
   fn file_name(&self) -> Cow<OsStr>;
   fn file_type(&self) -> std::io::Result<FileType>;
-  fn metadata(&self) -> std::io::Result<Self::MetadataValue>;
+  fn metadata(&self) -> std::io::Result<Self::Metadata>;
   fn path(&self) -> Cow<PathBuf>;
 }
 
 pub trait FsReadDir {
-  type Entry: FsDirEntry;
+  type ReadDirEntry: FsDirEntry;
 
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::Entry>>>;
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>;
 }
 
 pub trait FsRemoveDirAll {

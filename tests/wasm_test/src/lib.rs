@@ -22,7 +22,6 @@ use sys_traits::FsReadDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSymlinkFile;
-use sys_traits::FsSymlinkMetadata;
 use sys_traits::FsWrite;
 use sys_traits::OpenOptions;
 use sys_traits::SystemRandom;

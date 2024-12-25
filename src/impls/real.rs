@@ -409,6 +409,14 @@ impl FsMetadata for RealSys {
   fn fs_metadata(&self, path: impl AsRef<Path>) -> Result<Self::Metadata> {
     std::fs::metadata(path).map(RealFsMetadata)
   }
+
+  #[inline]
+  fn fs_symlink_metadata(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> Result<Self::Metadata> {
+    std::fs::symlink_metadata(path).map(RealFsMetadata)
+  }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -423,24 +431,6 @@ impl FsMetadata for RealSys {
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsSymlinkMetadata for RealSys {
-  type MetadataValue = RealFsMetadata;
-
-  #[inline]
-  fn fs_symlink_metadata(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> Result<Self::MetadataValue> {
-    std::fs::symlink_metadata(path).map(RealFsMetadata)
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-impl FsSymlinkMetadata for RealSys {
-  type MetadataValue = WasmMetadata;
 
   #[inline]
   fn fs_symlink_metadata(
@@ -564,7 +554,7 @@ impl FsRead for RealSys {
 pub struct RealFsDirEntry(std::fs::DirEntry);
 
 impl FsDirEntry for RealFsDirEntry {
-  type MetadataValue = RealFsMetadata;
+  type Metadata = RealFsMetadata;
 
   fn file_name(&self) -> Cow<OsStr> {
     Cow::Owned(self.0.file_name())
@@ -574,7 +564,7 @@ impl FsDirEntry for RealFsDirEntry {
     self.0.file_type().map(FileType::from)
   }
 
-  fn metadata(&self) -> std::io::Result<Self::MetadataValue> {
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
     self.0.metadata().map(RealFsMetadata)
   }
 
@@ -585,13 +575,14 @@ impl FsDirEntry for RealFsDirEntry {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsReadDir for RealSys {
-  type Entry = RealFsDirEntry;
+  type ReadDirEntry = RealFsDirEntry;
 
   #[inline]
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::Entry>>> {
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
     let iterator = std::fs::read_dir(path)?;
     Ok(iterator.map(|result| result.map(RealFsDirEntry)))
   }
@@ -636,7 +627,7 @@ pub struct WasmFsDirEntry {
 
 #[cfg(target_arch = "wasm32")]
 impl FsDirEntry for WasmFsDirEntry {
-  type MetadataValue = WasmMetadata;
+  type Metadata = WasmMetadata;
 
   fn file_name(&self) -> Cow<OsStr> {
     let name = js_sys::Reflect::get(&self.value, &JsValue::from_str("name"))
@@ -650,7 +641,7 @@ impl FsDirEntry for WasmFsDirEntry {
     Ok((&self.value).into())
   }
 
-  fn metadata(&self) -> std::io::Result<Self::MetadataValue> {
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
     // Use the same `self.inner` for metadata as it includes file stats
     Ok(WasmMetadata(self.value.clone().into()))
   }

@@ -456,10 +456,6 @@ impl FsMetadata for InMemorySys {
       modified: entry.modified_time(),
     })
   }
-}
-
-impl FsSymlinkMetadata for InMemorySys {
-  type MetadataValue = InMemoryMetadata;
 
   fn fs_symlink_metadata(
     &self,
@@ -592,12 +588,13 @@ impl FsRead for InMemorySys {
 }
 
 impl FsReadDir for InMemorySys {
-  type Entry = InMemoryDirEntry;
+  type ReadDirEntry = InMemoryDirEntry;
 
   fn fs_read_dir(
     &self,
     path: impl AsRef<std::path::Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::Entry>>> {
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
     let inner = self.0.read();
     let abs_path = inner.to_absolute_path(path.as_ref());
 
@@ -641,7 +638,7 @@ impl InMemoryDirEntry {
 }
 
 impl FsDirEntry for InMemoryDirEntry {
-  type MetadataValue = InMemoryMetadata;
+  type Metadata = InMemoryMetadata;
 
   fn file_name(&self) -> std::borrow::Cow<std::ffi::OsStr> {
     std::borrow::Cow::Owned(self.name.clone().into())
@@ -651,7 +648,7 @@ impl FsDirEntry for InMemoryDirEntry {
     Ok(self.file_type)
   }
 
-  fn metadata(&self) -> std::io::Result<Self::MetadataValue> {
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
     Ok(InMemoryMetadata {
       file_type: self.file_type,
       modified: self.modified,
