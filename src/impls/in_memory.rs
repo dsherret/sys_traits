@@ -648,12 +648,12 @@ impl FsDirEntry for InMemoryDirEntry {
   }
 
   fn file_type(&self) -> std::io::Result<FileType> {
-    Ok(self.file_type.clone())
+    Ok(self.file_type)
   }
 
   fn metadata(&self) -> std::io::Result<Self::MetadataValue> {
     Ok(InMemoryMetadata {
-      file_type: self.file_type.clone(),
+      file_type: self.file_type,
       modified: self.modified,
     })
   }
