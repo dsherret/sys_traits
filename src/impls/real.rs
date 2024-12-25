@@ -195,18 +195,6 @@ impl EnvCacheDir for RealSys {
   }
 }
 
-#[cfg(all(unix, feature = "libc"))]
-impl EnvCacheDir for RealSys {
-  fn env_cache_dir(&self) -> Option<PathBuf> {
-    if cfg!(target_os = "macos") {
-      self.env_home_dir().map(|h| h.join("Library/Caches"))
-    } else {
-      env_path_buf(self, "XDG_CACHE_HOME")
-        .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
-    }
-  }
-}
-
 #[cfg(all(target_os = "windows", feature = "winapi"))]
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
@@ -1047,5 +1035,22 @@ fn known_folder(folder_id: *const windows_sys::core::GUID) -> Option<PathBuf> {
     let ostr: OsString = OsStringExt::from_wide(path);
     CoTaskMemFree(path_ptr as *mut c_void);
     Some(PathBuf::from(ostr))
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[cfg(any(feature = "winapi", feature = "libc"))]
+  #[test]
+  fn test_known_folders() {
+    assert!(RealSys.env_cache_dir().is_some());
+    assert!(RealSys.env_home_dir().is_some());
+  }
+
+  #[test]
+  fn test_general() {
+    assert!(RealSys.sys_time_now().elapsed().is_ok());
   }
 }
