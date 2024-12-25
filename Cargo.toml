@@ -16,7 +16,9 @@ members = [
 
 [features]
 default = []
+libc = ["dep:libc"]
 serde = ["dep:serde"]
+winapi = ["dep:windows-sys"]
 
 [dependencies]
 parking_lot = "0.12"
@@ -24,6 +26,12 @@ serde = { version = "1", features = ["derive"], optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 getrandom = { version = "0.2" }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", optional = true, features = ["Win32_Globalization", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

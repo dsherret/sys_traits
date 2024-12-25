@@ -33,6 +33,14 @@ pub trait EnvSetVar {
   fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>);
 }
 
+pub trait EnvCacheDir {
+  fn env_cache_dir(&self) -> Option<PathBuf>;
+}
+
+pub trait EnvHomeDir {
+  fn env_home_dir(&self) -> Option<PathBuf>;
+}
+
 // File System
 
 #[derive(Default, Debug, Clone, Copy)]

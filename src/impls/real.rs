@@ -183,6 +183,114 @@ impl EnvSetVar for RealSys {
   }
 }
 
+#[cfg(all(unix, feature = "libc"))]
+impl EnvCacheDir for RealSys {
+  fn env_cache_dir(&self) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+      self.env_home_dir().map(|h| h.join("Library/Caches"))
+    } else {
+      env_path_buf(self, "XDG_CACHE_HOME")
+        .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
+    }
+  }
+}
+
+#[cfg(all(unix, feature = "libc"))]
+impl EnvCacheDir for RealSys {
+  fn env_cache_dir(&self) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+      self.env_home_dir().map(|h| h.join("Library/Caches"))
+    } else {
+      env_path_buf(self, "XDG_CACHE_HOME")
+        .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
+    }
+  }
+}
+
+#[cfg(all(target_os = "windows", feature = "winapi"))]
+impl EnvCacheDir for RealSys {
+  fn env_cache_dir(&self) -> Option<PathBuf> {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvCacheDir for RealSys {
+  fn env_cache_dir(&self) -> Option<PathBuf> {
+    match build_os() {
+      Os::Linux => env_path_buf(self, "XDG_CACHE_HOME")
+        .or_else(|| self.env_home_dir().map(|home| home.join(".cache"))),
+      Os::Mac => self.env_home_dir().map(|h| h.join("Library/Caches")),
+      Os::Windows => {
+        env_path_buf(self, "USERPROFILE").map(|dir| dir.join("AppData/Local"))
+      }
+    }
+  }
+}
+
+#[cfg(all(unix, feature = "libc"))]
+impl EnvHomeDir for RealSys {
+  fn env_home_dir(&self) -> Option<PathBuf> {
+    // This piece of code was taken from the deprecated home_dir() function in Rust's standard library
+    unsafe fn fallback() -> Option<std::ffi::OsString> {
+      let amt = match libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) {
+        n if n < 0 => 512_usize,
+        n => n as usize,
+      };
+      let mut buf = Vec::with_capacity(amt);
+      let mut passwd: libc::passwd = std::mem::zeroed();
+      let mut result = std::ptr::null_mut();
+      match libc::getpwuid_r(
+        libc::getuid(),
+        &mut passwd,
+        buf.as_mut_ptr(),
+        buf.capacity(),
+        &mut result,
+      ) {
+        0 if !result.is_null() => {
+          let ptr = passwd.pw_dir as *const _;
+          let bytes = std::ffi::CStr::from_ptr(ptr).to_bytes().to_vec();
+          Some(std::os::unix::ffi::OsStringExt::from_vec(bytes))
+        }
+        _ => None,
+      }
+    }
+
+    env_path_buf(self, "HOME").or_else(|| {
+      // SAFETY: libc
+      unsafe { fallback().map(PathBuf::from) }
+    })
+  }
+}
+
+#[cfg(all(target_os = "windows", feature = "winapi"))]
+impl EnvHomeDir for RealSys {
+  fn env_home_dir(&self) -> Option<PathBuf> {
+    env_path_buf(self, "USERPROFILE").or_else(|| {
+      known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
+    })
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl EnvHomeDir for RealSys {
+  fn env_home_dir(&self) -> Option<PathBuf> {
+    if is_windows() {
+      env_path_buf(self, "USERPROFILE")
+    } else {
+      env_path_buf(self, "HOME")
+    }
+  }
+}
+
+#[cfg(any(target_arch = "wasm32", feature = "winapi", feature = "libc"))]
+fn env_path_buf(sys: &RealSys, key: &str) -> Option<PathBuf> {
+  sys
+    .env_var_os(key)
+    .and_then(|h| if h.is_empty() { None } else { Some(h) })
+    .map(PathBuf::from)
+}
+
 // ==== File System ====
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -890,10 +998,54 @@ fn path_to_str(path: &Path) -> Cow<str> {
 }
 
 #[cfg(target_arch = "wasm32")]
+#[inline]
 fn is_windows() -> bool {
-  static IS_WINDOWS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+  build_os() == Os::Windows
+}
 
-  *IS_WINDOWS.get_or_init(|| {
-    js_sys::Reflect::get(&BUILD, &JsValue::from_str("os")).unwrap() == "windows"
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Os {
+  Windows,
+  Mac,
+  Linux,
+}
+
+#[cfg(target_arch = "wasm32")]
+fn build_os() -> Os {
+  static BUILD_OS: std::sync::OnceLock<Os> = std::sync::OnceLock::new();
+
+  *BUILD_OS.get_or_init(|| {
+    let os = js_sys::Reflect::get(&BUILD, &JsValue::from_str("os")).unwrap();
+    match os.as_string().unwrap().as_str() {
+      "windows" => Os::Windows,
+      "mac" => Os::Mac,
+      _ => Os::Linux,
+    }
   })
+}
+
+#[cfg(all(windows, feature = "winapi"))]
+fn known_folder(folder_id: *const windows_sys::core::GUID) -> Option<PathBuf> {
+  use std::ffi::c_void;
+  use std::os::windows::ffi::OsStringExt;
+  use windows_sys::Win32::Foundation::S_OK;
+  use windows_sys::Win32::Globalization::lstrlenW;
+  use windows_sys::Win32::System::Com::CoTaskMemFree;
+  use windows_sys::Win32::UI::Shell::SHGetKnownFolderPath;
+
+  // SAFETY: winapi calls
+  unsafe {
+    let mut path_ptr = std::ptr::null_mut();
+    let result =
+      SHGetKnownFolderPath(folder_id, 0, std::ptr::null_mut(), &mut path_ptr);
+    if result != S_OK {
+      return None;
+    }
+    let len = lstrlenW(path_ptr) as usize;
+    let path = std::slice::from_raw_parts(path_ptr, len);
+    let ostr: OsString = OsStringExt::from_wide(path);
+    CoTaskMemFree(path_ptr as *mut c_void);
+    Some(PathBuf::from(ostr))
+  }
 }
