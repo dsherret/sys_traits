@@ -358,6 +358,26 @@ impl InMemorySys {
   pub fn disable_thread_sleep(&self) {
     self.0.write().thread_sleep_enabled = false;
   }
+
+  pub fn fs_insert(&self, path: impl AsRef<Path>, data: impl AsRef<[u8]>) {
+    self
+      .fs_create_dir_all(path.as_ref().parent().unwrap())
+      .unwrap();
+    self.fs_write(path, data).unwrap();
+  }
+
+  /// Helper method for inserting json into the in-memory file system.
+  #[cfg(feature = "serde_json")]
+  pub fn fs_insert_json(
+    &self,
+    path: impl AsRef<Path>,
+    json: serde_json::Value,
+  ) {
+    self
+      .fs_create_dir_all(path.as_ref().parent().unwrap())
+      .unwrap();
+    self.fs_write(path, json.to_string()).unwrap();
+  }
 }
 
 impl EnvCurrentDir for InMemorySys {

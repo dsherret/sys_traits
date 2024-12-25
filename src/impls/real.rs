@@ -590,12 +590,13 @@ impl FsReadDir for RealSys {
 
 #[cfg(target_arch = "wasm32")]
 impl FsReadDir for RealSys {
-  type Entry = WasmFsDirEntry;
+  type ReadDirEntry = WasmFsDirEntry;
 
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::Entry>>> {
+  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
+  {
     let path_str = wasm_path_to_str(path.as_ref());
 
     // Use Deno.readDirSync to get directory entries
