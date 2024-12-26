@@ -1116,7 +1116,8 @@ pub fn wasm_string_to_path(path: String) -> PathBuf {
   }
 }
 
-/// Helper that converts a path to a string for Wasm.
+/// Helper that converts a path to a string for Wasm. The `wasm` feature
+/// must be enabled for this to work.
 ///
 /// This will convert a path to have backslashes for JS on Windows.
 ///
