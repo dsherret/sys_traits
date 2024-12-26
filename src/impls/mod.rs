@@ -14,10 +14,10 @@ pub use real::wasm_string_to_path;
 #[cfg(feature = "real")]
 pub use real::RealSys;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub use real::WasmFile;
 
-#[cfg(all(feature = "real", target_arch = "wasm32"))]
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub type RealFsFile = WasmFile;
 #[cfg(all(feature = "real", not(target_arch = "wasm32")))]
 pub type RealFsFile = real::RealFsFile;

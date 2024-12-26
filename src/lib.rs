@@ -37,11 +37,11 @@ pub trait EnvVar {
       .env_var_os(key)
       .and_then(|h| if h.is_empty() { None } else { Some(h) })
       .map(|value| {
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
         {
           impls::wasm_string_to_path(value.to_string_lossy().to_string())
         }
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
         {
           PathBuf::from(value)
         }
