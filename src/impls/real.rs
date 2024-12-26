@@ -29,6 +29,8 @@ extern "C" {
   fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
   fn deno_cwd() -> std::result::Result<String, JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = linkSync, catch)]
+  fn deno_link_sync(src: &str, dst: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = ["Deno"], js_name = lstatSync, catch)]
   fn deno_lstat_sync(
     path: &str,
@@ -373,6 +375,32 @@ impl FsCreateDirAll for RealSys {
     // Call the Deno.mkdirSync function
     deno_mkdir_sync(&path_str, &JsValue::from(options))
       .map_err(|e| js_value_to_io_error(e))
+  }
+}
+
+#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+impl FsHardLink for RealSys {
+  #[inline]
+  fn fs_hard_link(
+    &self,
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+  ) -> Result<()> {
+    std::fs::hard_link(src, dst)
+  }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+impl FsHardLink for RealSys {
+  fn fs_hard_link(
+    &self,
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    let src_str = wasm_path_to_str(src.as_ref());
+    let dst_str = wasm_path_to_str(dst.as_ref());
+
+    deno_link_sync(&src_str, &dst_str).map_err(js_value_to_io_error)
   }
 }
 

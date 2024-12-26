@@ -112,6 +112,14 @@ pub trait FsCreateDirAll {
   fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
 }
 
+pub trait FsHardLink {
+  fn fs_hard_link(
+    &self,
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+  ) -> std::io::Result<()>;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileType {
   File,
