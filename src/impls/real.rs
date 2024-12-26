@@ -516,7 +516,7 @@ impl FsOpen for RealSys {
       #[cfg(unix)]
       {
         use std::os::unix::fs::OpenOptionsExt;
-        open_options.mode(mode);
+        builder.mode(mode);
       }
       #[cfg(not(unix))]
       let _ = mode;
