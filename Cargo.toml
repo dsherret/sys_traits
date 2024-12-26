@@ -1,6 +1,6 @@
 [package]
 name = "sys_traits"
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/dsherret/sys_traits"
@@ -24,6 +24,7 @@ serde = ["dep:serde"]
 serde_json = ["dep:serde_json", "serde"]
 strip_unc = []
 winapi = ["dep:windows-sys"]
+wasm = ["real", "dep:js-sys", "dep:wasm-bindgen"]
 
 [dependencies]
 parking_lot = { version = "0.12", optional = true }
@@ -40,7 +41,7 @@ libc = { version = "0.2", optional = true }
 windows-sys = { version = "0.59", optional = true, features = ["Win32_Globalization", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "0.3"
-wasm-bindgen = "0.2"
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
 
 [dev-dependencies]

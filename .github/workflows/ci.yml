@@ -56,6 +56,9 @@ jobs:
           cargo build --features getrandom
           cargo build --features getrandom --features memory
           cargo build --features strip_unc
+          rustup target add wasm32-unknown-unknown
+          # builds wasm without wasm feature
+          cargo build --target wasm32-unknown-unknown
 
       - name: Test
         run: cargo test --all-targets --all-features

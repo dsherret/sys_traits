@@ -8,5 +8,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 console_error_panic_hook = "0.1.7"
-sys_traits = { path = "../../", features = ["real"] }
+sys_traits = { path = "../../", features = ["wasm"] }
 wasm-bindgen = "=0.2.92"
