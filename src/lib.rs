@@ -73,6 +73,8 @@ pub struct OpenOptions {
   pub truncate: bool,
   pub append: bool,
   pub create_new: bool,
+  /// Unix only. Ignored on Windows.
+  pub mode: Option<u32>,
 }
 
 impl OpenOptions {
@@ -84,6 +86,7 @@ impl OpenOptions {
       truncate: false,
       append: false,
       create_new: false,
+      mode: None,
     }
   }
 
@@ -95,6 +98,7 @@ impl OpenOptions {
       truncate: true,
       append: false,
       create_new: false,
+      mode: None,
     }
   }
 }
@@ -206,13 +210,8 @@ pub trait FsMetadata {
   }
 }
 
-pub trait FsFile:
-  std::io::Read + std::io::Write + FsFileSetPermissions
-{
-}
-
 pub trait FsOpen {
-  type File: FsFile;
+  type File: std::io::Read + std::io::Write + FsFileSetPermissions;
 
   fn fs_open(
     &self,
