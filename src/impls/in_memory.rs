@@ -126,7 +126,7 @@ impl InMemorySysInner {
   }
 
   fn time_now(&self) -> SystemTime {
-    self.time.unwrap_or_else(|| SystemTime::now())
+    self.time.unwrap_or_else(SystemTime::now)
   }
 
   fn lookup_entry<'a>(
