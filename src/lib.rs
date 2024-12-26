@@ -11,18 +11,45 @@ use std::time::SystemTime;
 
 pub mod impls;
 
-// Environment
+// Reasonings:
+// 1. Why separate trait for implementation and use?
+//    - This is to allow boxing an Impl trait because stuff like `impl AsRef<Path>`
+//      can't be boxed.
+
+// #### ENVIRONMENT ####
+
+// == EnvCurrentDir ==
 
 pub trait EnvCurrentDir {
   fn env_current_dir(&self) -> std::io::Result<PathBuf>;
 }
 
-pub trait EnvSetCurrentDir {
-  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+// == EnvSetCurrentDir ==
+
+pub trait EnvSetCurrentDirImpl {
+  fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()>;
 }
 
-pub trait EnvVar {
-  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString>;
+pub trait EnvSetCurrentDir: EnvSetCurrentDirImpl {
+  #[inline]
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    self.env_set_current_dir_impl(path.as_ref())
+  }
+}
+
+impl<T: EnvSetCurrentDirImpl> EnvSetCurrentDir for T {}
+
+// == EnvVar ==
+
+pub trait EnvVarImpl {
+  fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString>;
+}
+
+pub trait EnvVar: EnvVarImpl {
+  #[inline]
+  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
+    self.env_var_os_impl(key.as_ref())
+  }
 
   fn env_var(&self, key: impl AsRef<OsStr>) -> Result<String, VarError> {
     match self.env_var_os(key) {
@@ -49,19 +76,35 @@ pub trait EnvVar {
   }
 }
 
-pub trait EnvSetVar {
-  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>);
+impl<T: EnvVarImpl> EnvVar for T {}
+
+// == EnvSetVar ==
+
+pub trait EnvSetVarImpl {
+  fn env_set_var_impl(&self, key: &OsStr, value: &OsStr);
 }
+
+pub trait EnvSetVar: EnvSetVarImpl {
+  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+    self.env_set_var_impl(key.as_ref(), value.as_ref())
+  }
+}
+
+impl<T: EnvSetVarImpl> EnvSetVar for T {}
+
+// == EnvCacheDir ==
 
 pub trait EnvCacheDir {
   fn env_cache_dir(&self) -> Option<PathBuf>;
 }
 
+// == EnvHomeDir ==
+
 pub trait EnvHomeDir {
   fn env_home_dir(&self) -> Option<PathBuf>;
 }
 
-// File System
+// #### FILE SYSTEM ####
 
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
@@ -103,22 +146,57 @@ impl OpenOptions {
   }
 }
 
-pub trait FsCanonicalize {
-  fn fs_canonicalize(&self, path: impl AsRef<Path>)
-    -> std::io::Result<PathBuf>;
+// == FsCanonicalize ==
+
+pub trait FsCanonicalizeImpl {
+  fn fs_canonicalize_impl(&self, path: &Path) -> std::io::Result<PathBuf>;
 }
 
-pub trait FsCreateDirAll {
-  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+pub trait FsCanonicalize: FsCanonicalizeImpl {
+  #[inline]
+  fn fs_canonicalize(
+    &self,
+    path: impl AsRef<Path>,
+  ) -> std::io::Result<PathBuf> {
+    self.fs_canonicalize_impl(path.as_ref())
+  }
 }
 
-pub trait FsHardLink {
+impl<T: FsCanonicalizeImpl> FsCanonicalize for T {}
+
+// == FsCreateDirAll ==
+
+pub trait FsCreateDirAllImpl {
+  fn fs_create_dir_all_impl(&self, path: &Path) -> std::io::Result<()>;
+}
+
+pub trait FsCreateDirAll: FsCreateDirAllImpl {
+  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    self.fs_create_dir_all_impl(path.as_ref())
+  }
+}
+
+impl<T: FsCreateDirAllImpl> FsCreateDirAll for T {}
+
+// == FsHardLink ==
+
+pub trait FsHardLinkImpl {
+  fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> std::io::Result<()>;
+}
+
+pub trait FsHardLink: FsHardLinkImpl {
   fn fs_hard_link(
     &self,
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
-  ) -> std::io::Result<()>;
+  ) -> std::io::Result<()> {
+    self.fs_hard_link_impl(src.as_ref(), dst.as_ref())
+  }
 }
+
+impl<T: FsHardLinkImpl> FsHardLink for T {}
+
+// == FsMetadata ==
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileType {
@@ -161,20 +239,50 @@ pub trait FsMetadataValue: std::fmt::Debug {
   fn modified(&self) -> std::io::Result<SystemTime>;
 }
 
-/// These two functions are so cloesly related that it becomes verbose to
-/// separate them out into two traits.
-pub trait FsMetadata {
+#[derive(Debug)]
+pub struct BoxedFsMetadataValue(pub Box<dyn FsMetadataValue>);
+
+impl FsMetadataValue for BoxedFsMetadataValue {
+  #[inline]
+  fn file_type(&self) -> FileType {
+    self.0.file_type()
+  }
+
+  #[inline]
+  fn modified(&self) -> std::io::Result<SystemTime> {
+    self.0.modified()
+  }
+}
+
+pub trait FsMetadataImpl {
   type Metadata: FsMetadataValue;
 
+  fn fs_metadata_impl(&self, path: &Path) -> std::io::Result<Self::Metadata>;
+
+  fn fs_symlink_metadata_impl(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<Self::Metadata>;
+}
+
+/// These two functions are so cloesly related that it becomes verbose to
+/// separate them out into two traits.
+pub trait FsMetadata: FsMetadataImpl {
+  #[inline]
   fn fs_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::Metadata>;
+  ) -> std::io::Result<Self::Metadata> {
+    self.fs_metadata_impl(path.as_ref())
+  }
 
+  #[inline]
   fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::Metadata>;
+  ) -> std::io::Result<Self::Metadata> {
+    self.fs_symlink_metadata_impl(path.as_ref())
+  }
 
   fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::File)
@@ -218,21 +326,47 @@ pub trait FsMetadata {
   }
 }
 
-pub trait FsOpen {
+impl<T: FsMetadataImpl> FsMetadata for T {}
+
+// == FsOpen ==
+
+pub trait FsOpenImpl {
   type File: std::io::Read + std::io::Write + FsFileSetPermissions;
 
-  fn fs_open(
+  fn fs_open_impl(
     &self,
-    path: impl AsRef<Path>,
+    path: &Path,
     options: &OpenOptions,
   ) -> std::io::Result<Self::File>;
 }
 
-pub trait FsRead {
+pub trait FsOpen: FsOpenImpl {
+  #[inline]
+  fn fs_open(
+    &self,
+    path: impl AsRef<Path>,
+    options: &OpenOptions,
+  ) -> std::io::Result<Self::File> {
+    self.fs_open_impl(path.as_ref(), options)
+  }
+}
+
+impl<T: FsOpenImpl> FsOpen for T {}
+
+// == FsRead ==
+
+pub trait FsReadImpl {
+  fn fs_read_impl(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>>;
+}
+
+pub trait FsRead: FsReadImpl {
+  #[inline]
   fn fs_read(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, [u8]>>;
+  ) -> std::io::Result<Cow<'static, [u8]>> {
+    self.fs_read_impl(path.as_ref())
+  }
 
   fn fs_read_to_string(
     &self,
@@ -274,6 +408,10 @@ pub trait FsRead {
   }
 }
 
+impl<T: FsReadImpl> FsRead for T {}
+
+// == FsReadDir ==
+
 pub trait FsDirEntry: std::fmt::Debug {
   type Metadata: FsMetadataValue;
 
@@ -283,54 +421,191 @@ pub trait FsDirEntry: std::fmt::Debug {
   fn path(&self) -> Cow<Path>;
 }
 
-pub trait FsReadDir {
+#[derive(Debug)]
+pub struct BoxedFsDirEntry(
+  pub Box<dyn FsDirEntry<Metadata = BoxedFsMetadataValue>>,
+);
+
+impl FsDirEntry for BoxedFsDirEntry {
+  type Metadata = BoxedFsMetadataValue;
+
+  #[inline]
+  fn file_name(&self) -> Cow<OsStr> {
+    self.0.file_name()
+  }
+
+  #[inline]
+  fn file_type(&self) -> std::io::Result<FileType> {
+    self.0.file_type()
+  }
+
+  #[inline]
+  fn metadata(&self) -> std::io::Result<Self::Metadata> {
+    self.0.metadata()
+  }
+
+  #[inline]
+  fn path(&self) -> Cow<Path> {
+    self.0.path()
+  }
+}
+
+pub trait FsReadDirImpl {
   type ReadDirEntry: FsDirEntry;
 
+  fn fs_read_dir_impl(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+  >;
+}
+
+pub trait FsReadDir: FsReadDirImpl {
+  #[inline]
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>;
+  ) -> std::io::Result<
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+  > {
+    self.fs_read_dir_impl(path.as_ref())
+  }
 }
 
-pub trait FsRemoveDirAll {
-  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+impl<T: FsReadDirImpl> FsReadDir for T {}
+
+pub struct BoxedFsReadDirRef<'a>(
+  pub &'a dyn FsReadDirImpl<ReadDirEntry = BoxedFsDirEntry>,
+);
+
+impl<'a> FsReadDirImpl for BoxedFsReadDirRef<'a> {
+  type ReadDirEntry = BoxedFsDirEntry;
+
+  #[inline]
+  fn fs_read_dir_impl(
+    &self,
+    path: &Path,
+  ) -> std::io::Result<
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+  > {
+    self.0.fs_read_dir_impl(path)
+  }
 }
 
-pub trait FsRemoveFile {
-  fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()>;
+// == FsRemoveDirAll ==
+
+pub trait FsRemoveDirAllImpl {
+  fn fs_remove_dir_all_impl(&self, path: &Path) -> std::io::Result<()>;
 }
 
-pub trait FsRename {
+pub trait FsRemoveDirAll: FsRemoveDirAllImpl {
+  #[inline]
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    self.fs_remove_dir_all_impl(path.as_ref())
+  }
+}
+
+impl<T: FsRemoveDirAllImpl> FsRemoveDirAll for T {}
+
+// == FsRemoveFile ==
+
+pub trait FsRemoveFileImpl {
+  fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()>;
+}
+
+pub trait FsRemoveFile: FsRemoveFileImpl {
+  #[inline]
+  fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    self.fs_remove_file_impl(path.as_ref())
+  }
+}
+
+impl<T: FsRemoveFileImpl> FsRemoveFile for T {}
+
+// == FsRename ==
+
+pub trait FsRenameImpl {
+  fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()>;
+}
+
+pub trait FsRename: FsRenameImpl {
+  #[inline]
   fn fs_rename(
     &self,
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    self.fs_rename_impl(from.as_ref(), to.as_ref())
+  }
+}
+
+impl<T: FsRenameImpl> FsRename for T {}
+
+// == FsSymlinkDir ==
+
+pub trait FsSymlinkDirImpl {
+  fn fs_symlink_dir_impl(
+    &self,
+    original: &Path,
+    link: &Path,
   ) -> std::io::Result<()>;
 }
 
-pub trait FsSymlinkDir {
+pub trait FsSymlinkDir: FsSymlinkDirImpl {
+  #[inline]
   fn fs_symlink_dir(
     &self,
     original: impl AsRef<Path>,
     link: impl AsRef<Path>,
+  ) -> std::io::Result<()> {
+    self.fs_symlink_dir_impl(original.as_ref(), link.as_ref())
+  }
+}
+
+impl<T: FsSymlinkDirImpl> FsSymlinkDir for T {}
+
+// == FsSymlinkFile ==
+
+pub trait FsSymlinkFileImpl {
+  fn fs_symlink_file_impl(
+    &self,
+    original: &Path,
+    link: &Path,
   ) -> std::io::Result<()>;
 }
 
-pub trait FsSymlinkFile {
+pub trait FsSymlinkFile: FsSymlinkFileImpl {
+  #[inline]
   fn fs_symlink_file(
     &self,
     original: impl AsRef<Path>,
     link: impl AsRef<Path>,
-  ) -> std::io::Result<()>;
+  ) -> std::io::Result<()> {
+    self.fs_symlink_file_impl(original.as_ref(), link.as_ref())
+  }
 }
 
-pub trait FsWrite {
+impl<T: FsSymlinkFileImpl> FsSymlinkFile for T {}
+
+// == FsWrite ==
+
+pub trait FsWriteImpl {
+  fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()>;
+}
+
+pub trait FsWrite: FsWriteImpl {
+  #[inline]
   fn fs_write(
     &self,
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
-  ) -> std::io::Result<()>;
+  ) -> std::io::Result<()> {
+    self.fs_write_impl(path.as_ref(), data.as_ref())
+  }
 }
+
+impl<T: FsWriteImpl> FsWrite for T {}
 
 // File System File
 
