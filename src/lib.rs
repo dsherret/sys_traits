@@ -479,7 +479,7 @@ pub struct BoxedFsReadDirRef<'a>(
   pub &'a dyn FsReadDirImpl<ReadDirEntry = BoxedFsDirEntry>,
 );
 
-impl<'a> FsReadDirImpl for BoxedFsReadDirRef<'a> {
+impl FsReadDirImpl for BoxedFsReadDirRef<'_> {
   type ReadDirEntry = BoxedFsDirEntry;
 
   #[inline]

@@ -120,7 +120,7 @@ extern "C" {
 
 // ==== Environment ====
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl EnvCurrentDir for RealSys {
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
     std::env::current_dir()
@@ -136,7 +136,7 @@ impl EnvCurrentDir for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl EnvSetCurrentDirImpl for RealSys {
   fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()> {
     std::env::set_current_dir(path)
@@ -150,7 +150,7 @@ impl EnvSetCurrentDirImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl EnvVarImpl for RealSys {
   fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString> {
     std::env::var_os(key)
@@ -170,7 +170,7 @@ impl EnvVarImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl EnvSetVarImpl for RealSys {
   fn env_set_var_impl(&self, key: &OsStr, value: &OsStr) {
     std::env::set_var(key, value);
@@ -284,7 +284,7 @@ impl EnvHomeDir for RealSys {
 
 // ==== File System ====
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsCanonicalizeImpl for RealSys {
   #[inline]
   fn fs_canonicalize_impl(&self, path: &Path) -> Result<PathBuf> {
@@ -350,7 +350,7 @@ impl FsCanonicalizeImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsCreateDirAllImpl for RealSys {
   #[inline]
   fn fs_create_dir_all_impl(&self, path: &Path) -> Result<()> {
@@ -378,7 +378,7 @@ impl FsCreateDirAllImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsHardLinkImpl for RealSys {
   #[inline]
   fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> Result<()> {
@@ -470,7 +470,7 @@ impl FsMetadataValue for WasmMetadata {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsMetadataImpl for RealSys {
   type Metadata = RealFsMetadata;
 
@@ -517,7 +517,7 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
   Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsOpenImpl for RealSys {
   type File = RealFsFile;
 
@@ -604,7 +604,7 @@ impl FsOpenImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsReadImpl for RealSys {
   #[inline]
   fn fs_read_impl(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
@@ -645,7 +645,7 @@ impl FsDirEntry for RealFsDirEntry {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsReadDirImpl for RealSys {
   type ReadDirEntry = RealFsDirEntry;
 
@@ -730,7 +730,7 @@ impl FsDirEntry for WasmFsDirEntry {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsRemoveDirAllImpl for RealSys {
   fn fs_remove_dir_all_impl(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_dir_all(path)
@@ -752,7 +752,7 @@ impl FsRemoveDirAllImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsRemoveFileImpl for RealSys {
   fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)
@@ -767,7 +767,7 @@ impl FsRemoveFileImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsRenameImpl for RealSys {
   fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::rename(from, to)
@@ -783,7 +783,7 @@ impl FsRenameImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsSymlinkDirImpl for RealSys {
   fn fs_symlink_dir_impl(
     &self,
@@ -829,7 +829,7 @@ impl FsSymlinkDirImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsSymlinkFileImpl for RealSys {
   fn fs_symlink_file_impl(
     &self,
@@ -875,7 +875,7 @@ impl FsSymlinkFileImpl for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsWriteImpl for RealSys {
   #[inline]
   fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
@@ -896,11 +896,11 @@ impl FsWriteImpl for RealSys {
 /// A wrapper type is used in order to force usages to
 /// `use sys_traits::FsFile` so that the code
 /// compiles under Wasm.
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 #[derive(Debug)]
 pub struct RealFsFile(std::fs::File);
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsFileSetPermissions for RealFsFile {
   #[inline]
   fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
@@ -918,7 +918,7 @@ impl FsFileSetPermissions for RealFsFile {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl std::io::Write for RealFsFile {
   #[inline]
   fn write(&mut self, buf: &[u8]) -> Result<usize> {
@@ -931,7 +931,7 @@ impl std::io::Write for RealFsFile {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl std::io::Read for RealFsFile {
   #[inline]
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
@@ -984,7 +984,7 @@ impl std::io::Read for WasmFile {
 
 // ==== System ====
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl SystemTimeNow for RealSys {
   #[inline]
   fn sys_time_now(&self) -> SystemTime {
@@ -1024,7 +1024,7 @@ impl crate::SystemRandom for RealSys {
   }
 }
 
-#[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl crate::ThreadSleep for RealSys {
   fn thread_sleep(&self, duration: std::time::Duration) {
     std::thread::sleep(duration);
@@ -1110,7 +1110,7 @@ pub fn wasm_string_to_path(path: String) -> PathBuf {
       PathBuf::from(path)
     }
   }
-  #[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+  #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
   {
     PathBuf::from(path)
   }
@@ -1133,7 +1133,7 @@ pub fn wasm_path_to_str(path: &Path) -> Cow<str> {
       path.to_string_lossy()
     }
   }
-  #[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
+  #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
   {
     path.to_string_lossy()
   }
