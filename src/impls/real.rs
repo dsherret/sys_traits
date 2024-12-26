@@ -286,7 +286,55 @@ impl EnvHomeDir for RealSys {
 impl FsCanonicalize for RealSys {
   #[inline]
   fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
-    std::fs::canonicalize(path)
+    std::fs::canonicalize(path).map(strip_unc_prefix)
+  }
+}
+
+#[cfg(any(not(windows), not(feature = "strip_unc")))]
+#[inline]
+pub fn strip_unc_prefix(path: PathBuf) -> PathBuf {
+  path
+}
+
+/// Strips the unc prefix (ex. \\?\) from Windows paths.
+#[cfg(all(windows, feature = "strip_unc"))]
+pub fn strip_unc_prefix(path: PathBuf) -> PathBuf {
+  use std::path::Component;
+  use std::path::Prefix;
+
+  let mut components = path.components();
+  match components.next() {
+    Some(Component::Prefix(prefix)) => {
+      match prefix.kind() {
+        // \\?\device
+        Prefix::Verbatim(device) => {
+          let mut path = PathBuf::new();
+          path.push(format!(r"\\{}\", device.to_string_lossy()));
+          path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
+          path
+        }
+        // \\?\c:\path
+        Prefix::VerbatimDisk(_) => {
+          let mut path = PathBuf::new();
+          path.push(prefix.as_os_str().to_string_lossy().replace(r"\\?\", ""));
+          path.extend(components);
+          path
+        }
+        // \\?\UNC\hostname\share_name\path
+        Prefix::VerbatimUNC(hostname, share_name) => {
+          let mut path = PathBuf::new();
+          path.push(format!(
+            r"\\{}\{}\",
+            hostname.to_string_lossy(),
+            share_name.to_string_lossy()
+          ));
+          path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
+          path
+        }
+        _ => path,
+      }
+    }
+    _ => path,
   }
 }
 
@@ -464,6 +512,15 @@ impl FsOpen for RealSys {
     options: &OpenOptions,
   ) -> std::io::Result<Self::File> {
     let mut builder = std::fs::OpenOptions::new();
+    if let Some(mode) = options.mode {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::OpenOptionsExt;
+        open_options.mode(mode);
+      }
+      #[cfg(not(unix))]
+      let _ = mode;
+    }
     builder
       .read(options.read)
       .write(options.write)
@@ -841,9 +898,6 @@ impl FsWrite for RealSys {
 #[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug)]
 pub struct RealFsFile(std::fs::File);
-
-#[cfg(not(target_arch = "wasm32"))]
-impl FsFile for RealFsFile {}
 
 #[cfg(not(target_arch = "wasm32"))]
 impl FsFileSetPermissions for RealFsFile {

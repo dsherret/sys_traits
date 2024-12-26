@@ -49,10 +49,13 @@ jobs:
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'windows')
         run: |
           cargo build --no-default-features
-          cargo build --features libc --features winapi
+          cargo build --features real
+          cargo build --features real --features libc --features winapi
           cargo build --features memory
+          cargo build --features real --features getrandom
           cargo build --features getrandom
           cargo build --features getrandom --features memory
+          cargo build --features strip_unc
 
       - name: Test
         run: cargo test --all-targets --all-features

@@ -14,16 +14,12 @@ use parking_lot::RwLock;
 
 use crate::*;
 
-use super::RealSys;
-
 #[derive(Debug, Clone)]
 pub struct InMemoryFile {
   sys: InMemorySys,
   inner: Arc<RwLock<FileInner>>,
   pos: usize,
 }
-
-impl FsFile for InMemoryFile {}
 
 #[derive(Debug)]
 struct FileInner {
@@ -130,7 +126,7 @@ impl InMemorySysInner {
   }
 
   fn time_now(&self) -> SystemTime {
-    self.time.unwrap_or_else(|| RealSys.sys_time_now())
+    self.time.unwrap_or_else(|| SystemTime::now())
   }
 
   fn lookup_entry<'a>(
@@ -577,7 +573,7 @@ impl FsOpen for InMemorySys {
             created_time: time_now,
             modified_time: time_now,
             data: vec![],
-            mode: 0o644,
+            mode: options.mode.unwrap_or(0o666),
           })),
         };
         let result = InMemoryFile {
@@ -906,6 +902,7 @@ impl FsWrite for InMemorySys {
       append: false,
       read: false,
       create_new: false,
+      mode: None,
     };
     let time_now = self.sys_time_now();
     let file = self.fs_open(path, &opts)?;
@@ -981,7 +978,8 @@ impl SystemRandom for InMemorySys {
       None => {
         #[cfg(feature = "getrandom")]
         {
-          RealSys.sys_random(buf)
+          getrandom::getrandom(buf)
+            .map_err(|err| Error::new(ErrorKind::Other, err.to_string()))
         }
         #[cfg(not(feature = "getrandom"))]
         {
@@ -996,7 +994,7 @@ impl SystemRandom for InMemorySys {
 impl ThreadSleep for InMemorySys {
   fn thread_sleep(&self, dur: std::time::Duration) {
     if self.0.read().thread_sleep_enabled {
-      RealSys.thread_sleep(dur);
+      std::thread::sleep(dur);
     }
   }
 }
