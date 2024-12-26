@@ -14,6 +14,7 @@ use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
+use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
@@ -172,6 +173,10 @@ fn run() -> std::io::Result<()> {
   assert_eq!(entries[0].metadata().unwrap().file_type(), FileType::File);
   assert_eq!(entries[1].file_name().to_string_lossy(), "sub");
   assert_eq!(entries[1].file_type().unwrap(), FileType::Dir);
+
+  // try writing and reading hard links
+  sys.fs_hard_link("file.txt", "hardlink.txt")?;
+  assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "tello there");
 
   log("Success!");
 

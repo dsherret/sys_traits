@@ -440,6 +440,36 @@ impl FsCreateDirAll for InMemorySys {
   }
 }
 
+impl FsHardLink for InMemorySys {
+  fn fs_hard_link(
+    &self,
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+  ) -> Result<()> {
+    let inner = self.0.read();
+    let src = inner.to_absolute_path(src.as_ref());
+    let dst = inner.to_absolute_path(dst.as_ref());
+    let (_, entry) = inner.lookup_entry(&src)?;
+    match entry {
+      DirectoryEntry::File(file) => {
+        let data = {
+          let inner = file.inner.read();
+          inner.data.clone()
+        };
+        drop(inner);
+        self.fs_write(&dst, data)?;
+      }
+      DirectoryEntry::Directory(_) | DirectoryEntry::Symlink(_) => {
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Cannot hard link directories or symlinks",
+        ));
+      }
+    }
+    Ok(())
+  }
+}
+
 #[derive(Debug, Clone)]
 pub struct InMemoryMetadata {
   file_type: FileType,
@@ -1372,11 +1402,8 @@ mod tests {
   fn test_fs_read_dir_empty_directory() {
     let sys = InMemorySys::default();
     let empty_dir = "/empty";
-
-    // Create an empty directory
     sys.fs_create_dir_all(empty_dir).unwrap();
 
-    // Read directory
     let entries: Vec<_> = sys
       .fs_read_dir(empty_dir)
       .unwrap()
@@ -1384,5 +1411,21 @@ mod tests {
       .collect();
 
     assert!(entries.is_empty());
+  }
+
+  #[test]
+  fn test_hard_link_sync() {
+    let sys = InMemorySys::default();
+    let empty_dir = "/empty";
+    sys.fs_create_dir_all(empty_dir).unwrap();
+
+    sys.fs_write("/empty/file.txt", b"Content").unwrap();
+    sys
+      .fs_hard_link("/empty/file.txt", "/empty/file2.txt")
+      .unwrap();
+    assert_eq!(
+      sys.fs_read("/empty/file2.txt").unwrap().as_ref(),
+      b"Content"
+    );
   }
 }
