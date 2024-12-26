@@ -343,6 +343,7 @@ impl FsCanonicalize for RealSys {
   fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
     deno_real_path_sync(&wasm_path_to_str(path.as_ref()))
       .map(wasm_string_to_path)
+      .map(strip_unc_prefix)
       .map_err(js_value_to_io_error)
   }
 }
