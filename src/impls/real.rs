@@ -946,9 +946,6 @@ pub struct WasmFile {
 }
 
 #[cfg(target_arch = "wasm32")]
-impl FsFile for WasmFile {}
-
-#[cfg(target_arch = "wasm32")]
 impl Drop for WasmFile {
   fn drop(&mut self) {
     self.file.close_internal();
