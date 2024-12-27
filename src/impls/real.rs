@@ -102,12 +102,30 @@ extern "C" {
   type DenoFsFile;
   #[wasm_bindgen(method, structural, js_name = close)]
   fn close_internal(this: &DenoFsFile);
-  #[wasm_bindgen(method, structural, js_name = writeSync)]
-  fn write_sync_internal(this: &DenoFsFile, data: &[u8]) -> usize;
+  #[wasm_bindgen(method, structural, js_name = writeSync, catch)]
+  fn write_sync_internal(
+    this: &DenoFsFile,
+    data: &[u8],
+  ) -> std::result::Result<usize, JsValue>;
   #[wasm_bindgen(method, structural, js_name = syncSync)]
   fn sync_internal(this: &DenoFsFile);
-  #[wasm_bindgen(method, structural, js_name = readSync)]
-  fn read_sync_internal(this: &DenoFsFile, buffer: &mut [u8]) -> Option<usize>;
+  #[wasm_bindgen(method, structural, js_name = readSync, catch)]
+  fn read_sync_internal(
+    this: &DenoFsFile,
+    buffer: &mut [u8],
+  ) -> std::result::Result<usize, JsValue>;
+  #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
+  fn seek_sync_i64_internal(
+    this: &DenoFsFile,
+    offset: i64,
+    seek_mode: u32,
+  ) -> std::result::Result<u64, wasm_bindgen::JsValue>;
+  #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
+  fn seek_sync_u64_internal(
+    this: &DenoFsFile,
+    offset: u64,
+    seek_mode: u32,
+  ) -> std::result::Result<u64, wasm_bindgen::JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -901,6 +919,9 @@ impl FsWriteImpl for RealSys {
 pub struct RealFsFile(std::fs::File);
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
+impl FsFile for RealFsFile {}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
 impl FsFileSetPermissions for RealFsFile {
   #[inline]
   fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
@@ -915,6 +936,13 @@ impl FsFileSetPermissions for RealFsFile {
       let _ = mode;
       Ok(())
     }
+  }
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
+impl std::io::Seek for RealFsFile {
+  fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
+    self.0.seek(pos)
   }
 }
 
@@ -954,6 +982,9 @@ impl Drop for WasmFile {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+impl FsFile for WasmFile {}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 impl FsFileSetPermissions for WasmFile {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()> {
     if is_windows() {
@@ -964,9 +995,32 @@ impl FsFileSetPermissions for WasmFile {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+impl std::io::Seek for WasmFile {
+  fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
+    match pos {
+      std::io::SeekFrom::Start(offset) => self
+        .file
+        .seek_sync_u64_internal(offset, 0)
+        .map_err(js_value_to_io_error),
+      std::io::SeekFrom::End(offset) => self
+        .file
+        .seek_sync_i64_internal(offset, 2)
+        .map_err(js_value_to_io_error),
+      std::io::SeekFrom::Current(offset) => self
+        .file
+        .seek_sync_i64_internal(offset, 1)
+        .map_err(js_value_to_io_error),
+    }
+  }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 impl std::io::Write for WasmFile {
   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-    Ok(self.file.write_sync_internal(buf))
+    self
+      .file
+      .write_sync_internal(buf)
+      .map_err(js_value_to_io_error)
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
@@ -978,7 +1032,10 @@ impl std::io::Write for WasmFile {
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 impl std::io::Read for WasmFile {
   fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-    Ok(self.file.read_sync_internal(buf).unwrap_or(0))
+    self
+      .file
+      .read_sync_internal(buf)
+      .map_err(js_value_to_io_error)
   }
 }
 

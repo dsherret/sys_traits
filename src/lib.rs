@@ -9,6 +9,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+pub mod boxed;
 pub mod impls;
 
 // Reasonings:
@@ -315,8 +316,13 @@ impl<T: FsMetadataImpl> FsMetadata for T {}
 
 // == FsOpen ==
 
+pub trait FsFile:
+  std::io::Read + std::io::Write + std::io::Seek + FsFileSetPermissions
+{
+}
+
 pub trait FsOpenImpl {
-  type File: std::io::Read + std::io::Write + FsFileSetPermissions;
+  type File: FsFile + 'static;
 
   fn fs_open_impl(
     &self,
@@ -407,7 +413,7 @@ pub trait FsDirEntry: std::fmt::Debug {
 }
 
 pub trait FsReadDirImpl {
-  type ReadDirEntry: FsDirEntry;
+  type ReadDirEntry: FsDirEntry + 'static;
 
   fn fs_read_dir_impl(
     &self,
