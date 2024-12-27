@@ -720,17 +720,19 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
   if let Some(error_obj) = js_value.dyn_ref::<js_sys::Error>() {
     let error_name = error_obj.name();
 
-    if error_name == "NotFound" {
-      return Error::new(
-        ErrorKind::NotFound,
-        error_obj
-          .message()
-          .as_string()
-          .unwrap_or_else(|| "Unknown error".to_string()),
-      );
+    let maybe_kind = if error_name == "NotFound" {
+      Some(ErrorKind::NotFound)
     } else if error_name == "AlreadyExists" {
+      Some(ErrorKind::AlreadyExists)
+    } else if error_name == "NotSupported" {
+      Some(ErrorKind::Unsupported)
+    } else {
+      None
+    };
+
+    if let Some(error_kind) = maybe_kind {
       return Error::new(
-        ErrorKind::AlreadyExists,
+        error_kind,
         error_obj
           .message()
           .as_string()

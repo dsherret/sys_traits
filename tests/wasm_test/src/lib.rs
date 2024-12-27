@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
@@ -9,8 +10,10 @@ use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
 use sys_traits::EnvSetCurrentDir;
+use sys_traits::EnvSetUmask;
 use sys_traits::EnvSetVar;
 use sys_traits::EnvTempDir;
+use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
@@ -200,8 +203,17 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   sys.fs_hard_link("file.txt", "hardlink.txt")?;
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
-  if !is_windows {
-    assert!(sys.env_set_umask(10).is_ok());
+  if is_windows {
+    let err = sys.env_umask().unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+    let err = sys.env_set_umask(0o777).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+  } else {
+    let original = sys.env_umask().unwrap();
+    let value = sys.env_set_umask(0o777).unwrap();
+    assert_eq!(value, original);
+    let value = sys.env_set_umask(original).unwrap();
+    assert_eq!(value, 0o0777);
   }
 
   log("Success!");
