@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::env;
+use std::fs;
 use std::io::Result;
 use std::path::Path;
 use std::path::PathBuf;
@@ -14,28 +16,28 @@ use crate::*;
 impl EnvCurrentDir for RealSys {
   #[inline]
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
-    std::env::current_dir()
+    env::current_dir()
   }
 }
 
 impl BaseEnvSetCurrentDir for RealSys {
   #[inline]
   fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
-    std::env::set_current_dir(path)
+    env::set_current_dir(path)
   }
 }
 
 impl BaseEnvVar for RealSys {
   #[inline]
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
-    std::env::var_os(key)
+    env::var_os(key)
   }
 }
 
 impl BaseEnvSetVar for RealSys {
   #[inline]
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
-    std::env::set_var(key, value);
+    env::set_var(key, value);
   }
 }
 
@@ -159,7 +161,7 @@ impl EnvHomeDir for RealSys {
 impl EnvTempDir for RealSys {
   #[inline]
   fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
-    Ok(std::env::temp_dir())
+    Ok(env::temp_dir())
   }
 }
 
@@ -168,7 +170,7 @@ impl EnvTempDir for RealSys {
 impl BaseFsCanonicalize for RealSys {
   #[inline]
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
-    std::fs::canonicalize(path).map(strip_unc_prefix)
+    fs::canonicalize(path).map(strip_unc_prefix)
   }
 }
 
@@ -178,7 +180,7 @@ impl BaseFsCreateDir for RealSys {
     path: &Path,
     options: &CreateDirOptions,
   ) -> Result<()> {
-    let mut builder = std::fs::DirBuilder::new();
+    let mut builder = fs::DirBuilder::new();
     builder.recursive(options.recursive);
     #[cfg(unix)]
     {
@@ -194,7 +196,7 @@ impl BaseFsCreateDir for RealSys {
 impl BaseFsHardLink for RealSys {
   #[inline]
   fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> Result<()> {
-    std::fs::hard_link(src, dst)
+    fs::hard_link(src, dst)
   }
 }
 
@@ -202,7 +204,7 @@ impl BaseFsHardLink for RealSys {
 /// `use sys_traits::FsMetadataValue` so that the code
 /// compiles under Wasm.
 #[derive(Debug, Clone)]
-pub struct RealFsMetadata(std::fs::Metadata);
+pub struct RealFsMetadata(fs::Metadata);
 
 impl FsMetadataValue for RealFsMetadata {
   fn file_type(&self) -> FileType {
@@ -220,12 +222,12 @@ impl BaseFsMetadata for RealSys {
 
   #[inline]
   fn base_fs_metadata(&self, path: &Path) -> Result<Self::Metadata> {
-    std::fs::metadata(path).map(RealFsMetadata)
+    fs::metadata(path).map(RealFsMetadata)
   }
 
   #[inline]
   fn base_fs_symlink_metadata(&self, path: &Path) -> Result<Self::Metadata> {
-    std::fs::symlink_metadata(path).map(RealFsMetadata)
+    fs::symlink_metadata(path).map(RealFsMetadata)
   }
 }
 
@@ -237,7 +239,7 @@ impl BaseFsOpen for RealSys {
     path: &Path,
     options: &OpenOptions,
   ) -> std::io::Result<Self::File> {
-    let mut builder = std::fs::OpenOptions::new();
+    let mut builder = fs::OpenOptions::new();
     if let Some(mode) = options.mode {
       #[cfg(unix)]
       {
@@ -262,12 +264,12 @@ impl BaseFsOpen for RealSys {
 impl BaseFsRead for RealSys {
   #[inline]
   fn base_fs_read(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
-    std::fs::read(path).map(Cow::Owned)
+    fs::read(path).map(Cow::Owned)
   }
 }
 
 #[derive(Debug)]
-pub struct RealFsDirEntry(std::fs::DirEntry);
+pub struct RealFsDirEntry(fs::DirEntry);
 
 impl FsDirEntry for RealFsDirEntry {
   type Metadata = RealFsMetadata;
@@ -303,7 +305,7 @@ impl BaseFsReadDir for RealSys {
   ) -> std::io::Result<
     Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
   > {
-    let iterator = std::fs::read_dir(path)?;
+    let iterator = fs::read_dir(path)?;
     Ok(Box::new(iterator.map(|result| result.map(RealFsDirEntry))))
   }
 }
@@ -311,21 +313,21 @@ impl BaseFsReadDir for RealSys {
 impl BaseFsRemoveDirAll for RealSys {
   #[inline]
   fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
-    std::fs::remove_dir_all(path)
+    fs::remove_dir_all(path)
   }
 }
 
 impl BaseFsRemoveFile for RealSys {
   #[inline]
   fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
-    std::fs::remove_file(path)
+    fs::remove_file(path)
   }
 }
 
 impl BaseFsRename for RealSys {
   #[inline]
   fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
-    std::fs::rename(from, to)
+    fs::rename(from, to)
   }
 }
 
@@ -338,7 +340,7 @@ impl BaseFsSetPermissions for RealSys {
     mode: u32,
   ) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let permissions = std::fs::Permissions::from_mode(mode);
+    let permissions = fs::Permissions::from_mode(mode);
     fs::set_permissions(path, permissions)
   }
 }
@@ -394,7 +396,7 @@ impl BaseFsSymlinkFile for RealSys {
 impl BaseFsWrite for RealSys {
   #[inline]
   fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
-    std::fs::write(path, data)
+    fs::write(path, data)
   }
 }
 
@@ -404,7 +406,7 @@ impl BaseFsWrite for RealSys {
 /// `use sys_traits::FsFile` so that the code
 /// compiles under Wasm.
 #[derive(Debug)]
-pub struct RealFsFile(std::fs::File);
+pub struct RealFsFile(fs::File);
 
 impl FsFile for RealFsFile {}
 
@@ -414,7 +416,7 @@ impl FsFileSetPermissions for RealFsFile {
     #[cfg(unix)]
     {
       use std::os::unix::fs::PermissionsExt;
-      let permissions = std::fs::Permissions::from_mode(mode);
+      let permissions = fs::Permissions::from_mode(mode);
       self.0.set_permissions(permissions)
     }
     #[cfg(not(unix))]
