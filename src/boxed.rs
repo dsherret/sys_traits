@@ -59,7 +59,7 @@ pub trait FsOpenBoxed {
   ) -> std::io::Result<BoxedFsFile>;
 }
 
-impl<T: FsOpenImpl> FsOpenBoxed for T {
+impl<TFile: FsFile + 'static, T: FsOpenImpl<File = TFile>> FsOpenBoxed for T {
   fn fs_open_boxed(
     &self,
     path: &Path,

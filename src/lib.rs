@@ -322,7 +322,9 @@ pub trait FsFile:
 }
 
 pub trait FsOpenImpl {
-  type File: FsFile + 'static;
+  // ideally this wouldn't be constrained, but by not doing
+  // this then the type parameters get really out of hand
+  type File: FsFile;
 
   fn fs_open_impl(
     &self,
