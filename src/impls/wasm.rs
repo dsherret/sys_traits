@@ -523,6 +523,17 @@ impl BaseFsRename for RealSys {
   }
 }
 
+impl BaseFsSetPermissions for RealSys {
+  fn base_fs_set_permissions(
+    &self,
+    path: &Path,
+    mode: u32,
+  ) -> std::io::Result<()> {
+    let path = wasm_path_to_str(path);
+    deno_chmod_sync(&path, mode).map_err(js_value_to_io_error)
+  }
+}
+
 impl BaseFsSymlinkDir for RealSys {
   fn base_fs_symlink_dir(
     &self,

@@ -29,6 +29,7 @@ use sys_traits::FsRead;
 use sys_traits::FsReadDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
+use sys_traits::FsSetPermissions;
 use sys_traits::FsSymlinkFile;
 use sys_traits::FsWrite;
 use sys_traits::OpenOptions;
@@ -222,6 +223,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   sys.fs_hard_link("file.txt", "hardlink.txt")?;
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
+  // umask
   if is_windows {
     let err = sys.env_umask().unwrap_err();
     assert_eq!(err.kind(), ErrorKind::Unsupported);
@@ -233,6 +235,14 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     assert_eq!(value, original);
     let value = sys.env_set_umask(original).unwrap();
     assert_eq!(value, 0o0777);
+  }
+
+  // permissions
+  if is_windows {
+    let err = sys.fs_set_permissions("file.txt", 0o0777).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+  } else {
+    sys.fs_set_permissions("file.txt", 0o0777).unwrap();
   }
 
   log("Success!");
