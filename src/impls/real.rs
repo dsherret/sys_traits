@@ -136,6 +136,13 @@ extern "C" {
   static ENV: JsValue;
 }
 
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+#[wasm_bindgen(module = "node:os")]
+extern "C" {
+  #[wasm_bindgen(js_name = tmpdir, catch)]
+  fn node_tmpdir() -> std::result::Result<String, JsValue>;
+}
+
 // ==== Environment ====
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
@@ -297,6 +304,25 @@ impl EnvHomeDir for RealSys {
     } else {
       self.env_var_path("HOME")
     }
+  }
+}
+
+// == EnvTempDir ==
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
+impl EnvTempDir for RealSys {
+  fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
+    Ok(std::env::temp_dir())
+  }
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+impl EnvTempDir for RealSys {
+  fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
+    node_tmpdir()
+      .map(wasm_string_to_path)
+      .map(strip_unc_prefix)
+      .map_err(js_value_to_io_error)
   }
 }
 

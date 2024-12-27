@@ -422,6 +422,19 @@ impl EnvHomeDir for InMemorySys {
   }
 }
 
+impl EnvTempDir for InMemorySys {
+  fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
+    let inner = self.0.read();
+    if let Some(first_dir) = inner.system_root.first() {
+      let name = first_dir.name();
+      let name = if name.is_empty() { "/" } else { name };
+      Ok(PathBuf::from(name).join("tmp"))
+    } else {
+      Err(std::io::Error::new(ErrorKind::Other, "Create a root for the InMemorySys file system before getting the temp dir."))
+    }
+  }
+}
+
 // File System
 
 impl BaseFsCanonicalize for InMemorySys {
@@ -1542,5 +1555,13 @@ mod tests {
 
     let contents = sys.fs_read_to_string(file_path).unwrap();
     assert_eq!(&*contents, "abcXYZ\0\0a");
+  }
+
+  #[test]
+  fn test_temp_dir() {
+    let sys = InMemorySys::default();
+    assert!(sys.env_temp_dir().is_err());
+    sys.fs_create_dir_all("/test").unwrap();
+    assert_eq!(sys.env_temp_dir().unwrap(), PathBuf::from("/tmp"));
   }
 }

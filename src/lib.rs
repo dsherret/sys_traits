@@ -103,6 +103,12 @@ pub trait EnvHomeDir {
   fn env_home_dir(&self) -> Option<PathBuf>;
 }
 
+// == EnvTempDir ==
+
+pub trait EnvTempDir {
+  fn env_temp_dir(&self) -> std::io::Result<PathBuf>;
+}
+
 // #### FILE SYSTEM ####
 
 #[derive(Default, Debug, Clone, Copy)]
