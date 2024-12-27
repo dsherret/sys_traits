@@ -116,6 +116,7 @@ struct InMemorySysInner {
   random_seed: Option<u64>,
   envs: HashMap<OsString, OsString>,
   time: Option<SystemTime>,
+  umask: u32,
 }
 
 impl InMemorySysInner {
@@ -339,6 +340,7 @@ impl Default for InMemorySys {
       thread_sleep_enabled: true,
       random_seed: None,
       time: None,
+      umask: 0o666,
     })))
   }
 }
@@ -432,6 +434,21 @@ impl EnvTempDir for InMemorySys {
     } else {
       Err(std::io::Error::new(ErrorKind::Other, "Create a root for the InMemorySys file system before getting the temp dir."))
     }
+  }
+}
+
+impl EnvUmask for InMemorySys {
+  fn env_umask(&self) -> std::io::Result<u32> {
+    Ok(self.0.read().umask)
+  }
+}
+
+impl EnvSetUmask for InMemorySys {
+  fn env_set_umask(&self, umask: u32) -> std::io::Result<u32> {
+    let mut inner = self.0.write();
+    let old = inner.umask;
+    inner.umask = umask;
+    Ok(old)
   }
 }
 
@@ -550,6 +567,7 @@ impl BaseFsOpen for InMemorySys {
   ) -> std::io::Result<InMemoryFile> {
     let mut inner = self.0.write();
     let time_now = inner.time_now();
+    let umask = inner.umask;
     let path = inner.to_absolute_path(path);
 
     // Edge case: If `parent()` is None, path might be root or invalid
@@ -611,7 +629,7 @@ impl BaseFsOpen for InMemorySys {
             created_time: time_now,
             modified_time: time_now,
             data: vec![],
-            mode: options.mode.unwrap_or(0o666),
+            mode: options.mode.unwrap_or(umask),
           })),
         };
         let result = InMemoryFile {

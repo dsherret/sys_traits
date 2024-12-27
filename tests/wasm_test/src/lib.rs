@@ -40,12 +40,12 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub fn run_tests() -> Result<(), JsValue> {
+pub fn run_tests(is_windows: bool) -> Result<(), JsValue> {
   console_error_panic_hook::set_once();
-  run().map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+  run(is_windows).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
 }
 
-fn run() -> std::io::Result<()> {
+fn run(is_windows: bool) -> std::io::Result<()> {
   let sys = RealSys::default();
 
   let _ = sys.fs_remove_dir_all("tests/wasm_test/temp");
