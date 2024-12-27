@@ -2,4 +2,4 @@
 import { instantiate } from "./lib/sys_traits_wasm_test.generated.js";
 
 const { run_tests } = await instantiate();
-run_tests();
+run_tests(Deno.build.os === "windows");

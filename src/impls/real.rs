@@ -36,6 +36,51 @@ impl BaseEnvSetVar for RealSys {
 }
 
 #[cfg(all(unix, feature = "libc"))]
+impl EnvUmask for RealSys {
+  fn env_umask(&self) -> std::io::Result<u32> {
+    use libc::mode_t;
+    use libc::umask;
+
+    // unfortuantely there's no way to get the umask without setting it
+    // temporarily... so we set the value then restore it after
+    let current_umask = umask(0o000 as libc::umask);
+    umask(current_umask);
+    Ok(current_umask as u32)
+  }
+}
+
+#[cfg(target_os = "windows")]
+impl EnvUmask for RealSys {
+  fn env_umask(&self) -> std::io::Result<u32> {
+    Err(std::io::Error::new(
+      ErrorKind::Unsupported,
+      "umask is not supported on Windows",
+    ))
+  }
+}
+
+#[cfg(all(unix, feature = "libc"))]
+impl EnvSetUmask for RealSys {
+  fn env_set_umask(&self, umask: u32) -> std::io::Result<u32> {
+    use libc::mode_t;
+    use libc::umask;
+
+    let current_umask = umask(umask as libc::umask);
+    Ok(current_umask as u32)
+  }
+}
+
+#[cfg(target_os = "windows")]
+impl EnvSetUmask for RealSys {
+  fn env_set_umask(&self, _umask: u32) -> std::io::Result<u32> {
+    Err(std::io::Error::new(
+      ErrorKind::Unsupported,
+      "umask is not supported on Windows",
+    ))
+  }
+}
+
+#[cfg(all(unix, feature = "libc"))]
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
@@ -403,6 +448,23 @@ mod test {
   fn test_known_folders() {
     assert!(RealSys.env_cache_dir().is_some());
     assert!(RealSys.env_home_dir().is_some());
+  }
+
+  #[cfg(all(unix, feature = "libc"))]
+  #[test]
+  fn test_umask() {
+    let original_umask = RealSys.env_umask().unwrap();
+    assert_eq!(RealSys.env_set_umask(0o777).unwrap(), original_umask);
+    assert_eq!(RealSys.env_set_umask(original_umask).unwrap(), 0o777);
+  }
+
+  #[cfg(target_os = "windows")]
+  #[test]
+  fn test_umask() {
+    let err = RealSys.env_umask().unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+    let err = RealSys.env_set_umask(0o000).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
   }
 
   #[test]

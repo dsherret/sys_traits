@@ -200,6 +200,10 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   sys.fs_hard_link("file.txt", "hardlink.txt")?;
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
+  if !is_windows {
+    assert!(sys.env_set_umask(10).is_ok());
+  }
+
   log("Success!");
 
   Ok(())
