@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use sys_traits::impls::RealSys;
+use sys_traits::CreateDirOptions;
 use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
@@ -17,6 +18,7 @@ use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
+use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
 use sys_traits::FsHardLink;
@@ -51,8 +53,25 @@ pub fn run_tests(is_windows: bool) -> Result<(), JsValue> {
 fn run(is_windows: bool) -> std::io::Result<()> {
   let sys = RealSys::default();
 
+  // create dir all
   let _ = sys.fs_remove_dir_all("tests/wasm_test/temp");
   sys.fs_create_dir_all("tests/wasm_test/temp/sub")?;
+
+  // create dir
+  let err = sys
+    .fs_create_dir(
+      "tests/wasm_test/temp/sub/sub/sub",
+      &CreateDirOptions::default(),
+    )
+    .unwrap_err();
+  assert_eq!(err.kind(), ErrorKind::NotFound); // because not recursive
+  sys.fs_create_dir(
+    "tests/wasm_test/temp/sub/sub/sub",
+    &CreateDirOptions {
+      recursive: true, // ok because recursive
+      mode: Some(0o755),
+    },
+  )?;
 
   // random
   let mut data = [0; 10];

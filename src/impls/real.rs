@@ -165,10 +165,22 @@ impl BaseFsCanonicalize for RealSys {
   }
 }
 
-impl BaseFsCreateDirAll for RealSys {
-  #[inline]
-  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
-    std::fs::create_dir_all(path)
+impl BaseFsCreateDir for RealSys {
+  fn base_fs_create_dir(
+    &self,
+    path: &Path,
+    options: &CreateDirOptions,
+  ) -> Result<()> {
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(options.recursive);
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::DirBuilderExt;
+      if let Some(mode) = options.mode {
+        builder.mode(mode);
+      }
+    }
+    builder.create(path)
   }
 }
 

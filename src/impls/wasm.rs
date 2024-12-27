@@ -240,21 +240,33 @@ impl BaseFsCanonicalize for RealSys {
   }
 }
 
-impl BaseFsCreateDirAll for RealSys {
-  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
+impl BaseFsCreateDir for RealSys {
+  fn base_fs_create_dir(
+    &self,
+    path: &Path,
+    options: &CreateDirOptions,
+  ) -> Result<()> {
     let path_str = wasm_path_to_str(path);
 
     // Create the options object for mkdirSync
-    let options = js_sys::Object::new();
+    let js_options = js_sys::Object::new();
     js_sys::Reflect::set(
-      &options,
+      &js_options,
       &JsValue::from_str("recursive"),
-      &JsValue::from_bool(true),
+      &JsValue::from_bool(options.recursive),
     )
     .map_err(|e| js_value_to_io_error(e))?;
+    if let Some(mode) = options.mode {
+      js_sys::Reflect::set(
+        &js_options,
+        &JsValue::from_str("mode"),
+        &mode.into(),
+      )
+      .map_err(|e| js_value_to_io_error(e))?;
+    }
 
     // Call the Deno.mkdirSync function
-    deno_mkdir_sync(&path_str, &JsValue::from(options))
+    deno_mkdir_sync(&path_str, &JsValue::from(js_options))
       .map_err(|e| js_value_to_io_error(e))
   }
 }

@@ -182,20 +182,53 @@ pub trait FsCanonicalize: BaseFsCanonicalize {
 
 impl<T: BaseFsCanonicalize> FsCanonicalize for T {}
 
-// == FsCreateDirAll ==
+// == FsCreateDir ==
 
-pub trait BaseFsCreateDirAll {
-  #[doc(hidden)]
-  fn base_fs_create_dir_all(&self, path: &Path) -> std::io::Result<()>;
+#[derive(Default, Debug, Clone, Copy)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+pub struct CreateDirOptions {
+  pub recursive: bool,
+  /// Unix only. Ignored on Windows.
+  pub mode: Option<u32>,
 }
 
-pub trait FsCreateDirAll: BaseFsCreateDirAll {
-  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
-    self.base_fs_create_dir_all(path.as_ref())
+pub trait BaseFsCreateDir {
+  #[doc(hidden)]
+  fn base_fs_create_dir(
+    &self,
+    path: &Path,
+    options: &CreateDirOptions,
+  ) -> std::io::Result<()>;
+}
+
+pub trait FsCreateDir: BaseFsCreateDir {
+  fn fs_create_dir(
+    &self,
+    path: impl AsRef<Path>,
+    options: &CreateDirOptions,
+  ) -> std::io::Result<()> {
+    self.base_fs_create_dir(path.as_ref(), options)
   }
 }
 
-impl<T: BaseFsCreateDirAll> FsCreateDirAll for T {}
+impl<T: BaseFsCreateDir> FsCreateDir for T {}
+
+// == FsCreateDirAll ==
+
+pub trait FsCreateDirAll: BaseFsCreateDir {
+  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+    self.base_fs_create_dir(
+      path.as_ref(),
+      &CreateDirOptions {
+        recursive: true,
+        mode: None,
+      },
+    )
+  }
+}
+
+impl<T: BaseFsCreateDir> FsCreateDirAll for T {}
 
 // == FsHardLink ==
 

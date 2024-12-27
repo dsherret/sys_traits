@@ -463,8 +463,13 @@ impl BaseFsCanonicalize for InMemorySys {
   }
 }
 
-impl BaseFsCreateDirAll for InMemorySys {
-  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
+impl BaseFsCreateDir for InMemorySys {
+  fn base_fs_create_dir(
+    &self,
+    path: &Path,
+    // todo: implement this properly
+    _options: &CreateDirOptions,
+  ) -> Result<()> {
     let mut inner = self.0.write();
     let abs = inner.to_absolute_path(path);
     inner.find_directory_mut(&abs, true)?;
