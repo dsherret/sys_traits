@@ -338,7 +338,7 @@ impl BaseFsSetPermissions for RealSys {
     mode: u32,
   ) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let permissions = fs::Permissions::from_mode(mode);
+    let permissions = std::fs::Permissions::from_mode(mode);
     fs::set_permissions(path, permissions)
   }
 }
