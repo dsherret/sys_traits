@@ -33,7 +33,7 @@ Comes with two implementations that implement all the traits.
 ## Creating an implementation
 
 To create an implementation you must implement the traits; however, some traits
-require implementing `<TraitName>Impl` traits instead. For example, instead of
+require implementing `Base<TraitName>` traits instead. For example, instead of
 implementing `FsWrite`, you must implement `BaseFsWrite`:
 
 ```rs
