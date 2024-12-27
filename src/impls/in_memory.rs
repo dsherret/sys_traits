@@ -384,27 +384,27 @@ impl EnvCurrentDir for InMemorySys {
   }
 }
 
-impl EnvSetCurrentDir for InMemorySys {
-  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+impl EnvSetCurrentDirImpl for InMemorySys {
+  fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()> {
     let path = self.fs_canonicalize(path)?; // cause an error if not exists
     self.0.write().cwd = path;
     Ok(())
   }
 }
 
-impl EnvVar for InMemorySys {
-  fn env_var_os(&self, key: impl AsRef<OsStr>) -> Option<OsString> {
-    self.0.read().envs.get(key.as_ref()).cloned()
+impl EnvVarImpl for InMemorySys {
+  fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString> {
+    self.0.read().envs.get(key).cloned()
   }
 }
 
-impl EnvSetVar for InMemorySys {
-  fn env_set_var(&self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) {
+impl EnvSetVarImpl for InMemorySys {
+  fn env_set_var_impl(&self, key: &OsStr, value: &OsStr) {
     self
       .0
       .write()
       .envs
-      .insert(key.as_ref().to_os_string(), value.as_ref().to_os_string());
+      .insert(key.to_os_string(), value.to_os_string());
   }
 }
 
@@ -422,30 +422,26 @@ impl EnvHomeDir for InMemorySys {
 
 // File System
 
-impl FsCanonicalize for InMemorySys {
-  fn fs_canonicalize(&self, path: impl AsRef<Path>) -> Result<PathBuf> {
+impl FsCanonicalizeImpl for InMemorySys {
+  fn fs_canonicalize_impl(&self, path: &Path) -> Result<PathBuf> {
     let inner = self.0.read();
-    let path = inner.to_absolute_path(path.as_ref());
+    let path = inner.to_absolute_path(path);
     let (path, _) = inner.lookup_entry(&path)?;
     Ok(path)
   }
 }
 
-impl FsCreateDirAll for InMemorySys {
-  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> Result<()> {
+impl FsCreateDirAllImpl for InMemorySys {
+  fn fs_create_dir_all_impl(&self, path: &Path) -> Result<()> {
     let mut inner = self.0.write();
-    let abs = inner.to_absolute_path(path.as_ref());
+    let abs = inner.to_absolute_path(path);
     inner.find_directory_mut(&abs, true)?;
     Ok(())
   }
 }
 
-impl FsHardLink for InMemorySys {
-  fn fs_hard_link(
-    &self,
-    src: impl AsRef<Path>,
-    dst: impl AsRef<Path>,
-  ) -> Result<()> {
+impl FsHardLinkImpl for InMemorySys {
+  fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> Result<()> {
     let inner = self.0.read();
     let src = inner.to_absolute_path(src.as_ref());
     let dst = inner.to_absolute_path(dst.as_ref());
@@ -486,15 +482,12 @@ impl FsMetadataValue for InMemoryMetadata {
   }
 }
 
-impl FsMetadata for InMemorySys {
+impl FsMetadataImpl for InMemorySys {
   type Metadata = InMemoryMetadata;
 
-  fn fs_metadata(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<InMemoryMetadata> {
+  fn fs_metadata_impl(&self, path: &Path) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
-    let (_, entry) = inner.lookup_entry(path.as_ref())?;
+    let (_, entry) = inner.lookup_entry(path)?;
     Ok(InMemoryMetadata {
       file_type: match entry {
         DirectoryEntry::File(_) => FileType::File,
@@ -505,12 +498,12 @@ impl FsMetadata for InMemorySys {
     })
   }
 
-  fn fs_symlink_metadata(
+  fn fs_symlink_metadata_impl(
     &self,
-    path: impl AsRef<Path>,
+    path: &Path,
   ) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
-    let detail = inner.lookup_entry_detail_no_follow(path.as_ref())?;
+    let detail = inner.lookup_entry_detail_no_follow(path)?;
     match detail {
       LookupNoFollowEntry::NotFound(path) => Err(Error::new(
         ErrorKind::NotFound,
@@ -532,17 +525,17 @@ impl FsMetadata for InMemorySys {
   }
 }
 
-impl FsOpen for InMemorySys {
+impl FsOpenImpl for InMemorySys {
   type File = InMemoryFile;
 
-  fn fs_open(
+  fn fs_open_impl(
     &self,
-    path: impl AsRef<Path>,
+    path: &Path,
     options: &OpenOptions,
   ) -> std::io::Result<InMemoryFile> {
     let mut inner = self.0.write();
     let time_now = inner.time_now();
-    let path = inner.to_absolute_path(path.as_ref());
+    let path = inner.to_absolute_path(path);
 
     // Edge case: If `parent()` is None, path might be root or invalid
     // The minimal fix is to check for that scenario
@@ -624,38 +617,36 @@ impl FsOpen for InMemorySys {
   }
 }
 
-impl FsRead for InMemorySys {
-  fn fs_read(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, [u8]>> {
+impl FsReadImpl for InMemorySys {
+  fn fs_read_impl(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
     let arc_file = self.fs_open(path, &OpenOptions::read())?;
     let inner = arc_file.inner.read();
     Ok(Cow::Owned(inner.data.clone()))
   }
 }
 
-impl FsReadDir for InMemorySys {
+impl FsReadDirImpl for InMemorySys {
   type ReadDirEntry = InMemoryDirEntry;
 
-  fn fs_read_dir(
+  fn fs_read_dir_impl(
     &self,
-    path: impl AsRef<std::path::Path>,
-  ) -> std::io::Result<impl Iterator<Item = std::io::Result<Self::ReadDirEntry>>>
-  {
+    path: &Path,
+  ) -> std::io::Result<
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+  > {
     let inner = self.0.read();
-    let abs_path = inner.to_absolute_path(path.as_ref());
+    let abs_path = inner.to_absolute_path(path);
 
     let (_, entry) = inner.lookup_entry(&abs_path)?;
     match entry {
-      DirectoryEntry::Directory(dir) => Ok(
+      DirectoryEntry::Directory(dir) => Ok(Box::new(
         dir
           .entries
           .iter()
-          .map(|entry| Ok(InMemoryDirEntry::new(path.as_ref(), entry)))
+          .map(|entry| Ok(InMemoryDirEntry::new(path, entry)))
           .collect::<Vec<_>>()
           .into_iter(),
-      ),
+      )),
       _ => Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Path is not a directory",
@@ -710,10 +701,10 @@ impl FsDirEntry for InMemoryDirEntry {
   }
 }
 
-impl FsRemoveFile for InMemorySys {
-  fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+impl FsRemoveFileImpl for InMemorySys {
+  fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()> {
     let mut inner = self.0.write();
-    let path = inner.to_absolute_path(path.as_ref());
+    let path = inner.to_absolute_path(path);
     let parent_path = match path.parent() {
       Some(p) if !p.as_os_str().is_empty() => p,
       _ => {
@@ -747,12 +738,8 @@ impl FsRemoveFile for InMemorySys {
   }
 }
 
-impl FsRename for InMemorySys {
-  fn fs_rename(
-    &self,
-    from: impl AsRef<Path>,
-    to: impl AsRef<Path>,
-  ) -> std::io::Result<()> {
+impl FsRenameImpl for InMemorySys {
+  fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     let mut inner = self.0.write();
     let from = inner.to_absolute_path(from.as_ref());
     let to = inner.to_absolute_path(to.as_ref());
@@ -853,21 +840,21 @@ impl FsRename for InMemorySys {
   }
 }
 
-impl FsSymlinkDir for InMemorySys {
-  fn fs_symlink_dir(
+impl FsSymlinkDirImpl for InMemorySys {
+  fn fs_symlink_dir_impl(
     &self,
-    original: impl AsRef<Path>,
-    link: impl AsRef<Path>,
+    original: &Path,
+    link: &Path,
   ) -> std::io::Result<()> {
-    self.fs_symlink_file(original.as_ref(), link.as_ref())
+    self.fs_symlink_file_impl(original, link)
   }
 }
 
-impl FsSymlinkFile for InMemorySys {
-  fn fs_symlink_file(
+impl FsSymlinkFileImpl for InMemorySys {
+  fn fs_symlink_file_impl(
     &self,
-    original: impl AsRef<Path>,
-    link: impl AsRef<Path>,
+    original: &Path,
+    link: &Path,
   ) -> std::io::Result<()> {
     let mut inner = self.0.write();
     let time = inner.time_now();
@@ -893,7 +880,7 @@ impl FsSymlinkFile for InMemorySys {
 
         parent.entries[overwrite_pos] = DirectoryEntry::Symlink(Symlink {
           name: file_name.into_owned(),
-          target: original.as_ref().to_path_buf(),
+          target: original.to_path_buf(),
           inner: RwLock::new(SymlinkInner {
             created_time: time,
             modified_time: time,
@@ -906,7 +893,7 @@ impl FsSymlinkFile for InMemorySys {
           insert_index,
           DirectoryEntry::Symlink(Symlink {
             name: file_name.into_owned(),
-            target: original.as_ref().to_path_buf(),
+            target: original.to_path_buf(),
             inner: RwLock::new(SymlinkInner {
               created_time: time,
               modified_time: time,
@@ -919,12 +906,8 @@ impl FsSymlinkFile for InMemorySys {
   }
 }
 
-impl FsWrite for InMemorySys {
-  fn fs_write(
-    &self,
-    path: impl AsRef<Path>,
-    data: impl AsRef<[u8]>,
-  ) -> std::io::Result<()> {
+impl FsWriteImpl for InMemorySys {
+  fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
     let opts = OpenOptions {
       write: true,
       create: true,

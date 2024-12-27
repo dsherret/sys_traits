@@ -43,14 +43,14 @@ jobs:
 
       - name: Lint
         if: contains(matrix.os, 'ubuntu')
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --all-targets --features real,memory,getrandom,strip_unc,winapi,libc
 
       - name: Build configurations
         if: contains(matrix.os, 'ubuntu') || contains(matrix.os, 'windows')
         run: |
           cargo build --no-default-features
           cargo build --features real
-          cargo build --features real --features libc --features winapi
+          cargo build --features real --features libc,winapi
           cargo build --features memory
           cargo build --features real --features getrandom
           cargo build --features getrandom
@@ -61,7 +61,7 @@ jobs:
           cargo build --target wasm32-unknown-unknown
 
       - name: Test
-        run: cargo test --all-targets --all-features
+        run: cargo test --all-targets --features real,memory,getrandom,strip_unc,winapi,libc
 
       - name: Test (Wasm)
         run: deno task test
