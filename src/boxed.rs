@@ -3,13 +3,13 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::time::SystemTime;
 
+use crate::BaseFsOpen;
+use crate::BaseFsReadDir;
 use crate::FileType;
 use crate::FsDirEntry;
 use crate::FsFile;
 use crate::FsFileSetPermissions;
 use crate::FsMetadataValue;
-use crate::FsOpenImpl;
-use crate::FsReadDirImpl;
 use crate::OpenOptions;
 
 // == FsOpenBoxed ==
@@ -59,14 +59,14 @@ pub trait FsOpenBoxed {
   ) -> std::io::Result<BoxedFsFile>;
 }
 
-impl<TFile: FsFile + 'static, T: FsOpenImpl<File = TFile>> FsOpenBoxed for T {
+impl<TFile: FsFile + 'static, T: BaseFsOpen<File = TFile>> FsOpenBoxed for T {
   fn fs_open_boxed(
     &self,
     path: &Path,
     open_options: &OpenOptions,
   ) -> std::io::Result<BoxedFsFile> {
     self
-      .fs_open_impl(path, open_options)
+      .base_fs_open(path, open_options)
       .map(|file| BoxedFsFile(Box::new(file)))
   }
 }
@@ -160,13 +160,13 @@ pub trait FsReadDirBoxed {
   ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<BoxedFsDirEntry>>>>;
 }
 
-impl<T: FsReadDirImpl> FsReadDirBoxed for T {
+impl<T: BaseFsReadDir> FsReadDirBoxed for T {
   fn fs_read_dir_boxed(
     &self,
     path: &Path,
   ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<BoxedFsDirEntry>>>>
   {
-    let iter = self.fs_read_dir_impl(path)?;
+    let iter = self.base_fs_read_dir(path)?;
     Ok(Box::new(
       iter.map(|result| result.map(BoxedFsDirEntry::new)),
     ))

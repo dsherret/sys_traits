@@ -386,22 +386,22 @@ impl EnvCurrentDir for InMemorySys {
   }
 }
 
-impl EnvSetCurrentDirImpl for InMemorySys {
-  fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseEnvSetCurrentDir for InMemorySys {
+  fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
     let path = self.fs_canonicalize(path)?; // cause an error if not exists
     self.0.write().cwd = path;
     Ok(())
   }
 }
 
-impl EnvVarImpl for InMemorySys {
-  fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString> {
+impl BaseEnvVar for InMemorySys {
+  fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     self.0.read().envs.get(key).cloned()
   }
 }
 
-impl EnvSetVarImpl for InMemorySys {
-  fn env_set_var_impl(&self, key: &OsStr, value: &OsStr) {
+impl BaseEnvSetVar for InMemorySys {
+  fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     self
       .0
       .write()
@@ -424,8 +424,8 @@ impl EnvHomeDir for InMemorySys {
 
 // File System
 
-impl FsCanonicalizeImpl for InMemorySys {
-  fn fs_canonicalize_impl(&self, path: &Path) -> Result<PathBuf> {
+impl BaseFsCanonicalize for InMemorySys {
+  fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
     let inner = self.0.read();
     let path = inner.to_absolute_path(path);
     let (path, _) = inner.lookup_entry(&path)?;
@@ -433,8 +433,8 @@ impl FsCanonicalizeImpl for InMemorySys {
   }
 }
 
-impl FsCreateDirAllImpl for InMemorySys {
-  fn fs_create_dir_all_impl(&self, path: &Path) -> Result<()> {
+impl BaseFsCreateDirAll for InMemorySys {
+  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
     let mut inner = self.0.write();
     let abs = inner.to_absolute_path(path);
     inner.find_directory_mut(&abs, true)?;
@@ -442,8 +442,8 @@ impl FsCreateDirAllImpl for InMemorySys {
   }
 }
 
-impl FsHardLinkImpl for InMemorySys {
-  fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> Result<()> {
+impl BaseFsHardLink for InMemorySys {
+  fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> Result<()> {
     let inner = self.0.read();
     let src = inner.to_absolute_path(src.as_ref());
     let dst = inner.to_absolute_path(dst.as_ref());
@@ -484,10 +484,10 @@ impl FsMetadataValue for InMemoryMetadata {
   }
 }
 
-impl FsMetadataImpl for InMemorySys {
+impl BaseFsMetadata for InMemorySys {
   type Metadata = InMemoryMetadata;
 
-  fn fs_metadata_impl(&self, path: &Path) -> std::io::Result<InMemoryMetadata> {
+  fn base_fs_metadata(&self, path: &Path) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
     let (_, entry) = inner.lookup_entry(path)?;
     Ok(InMemoryMetadata {
@@ -500,7 +500,7 @@ impl FsMetadataImpl for InMemorySys {
     })
   }
 
-  fn fs_symlink_metadata_impl(
+  fn base_fs_symlink_metadata(
     &self,
     path: &Path,
   ) -> std::io::Result<InMemoryMetadata> {
@@ -527,10 +527,10 @@ impl FsMetadataImpl for InMemorySys {
   }
 }
 
-impl FsOpenImpl for InMemorySys {
+impl BaseFsOpen for InMemorySys {
   type File = InMemoryFile;
 
-  fn fs_open_impl(
+  fn base_fs_open(
     &self,
     path: &Path,
     options: &OpenOptions,
@@ -619,18 +619,18 @@ impl FsOpenImpl for InMemorySys {
   }
 }
 
-impl FsReadImpl for InMemorySys {
-  fn fs_read_impl(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
+impl BaseFsRead for InMemorySys {
+  fn base_fs_read(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
     let arc_file = self.fs_open(path, &OpenOptions::read())?;
     let inner = arc_file.inner.read();
     Ok(Cow::Owned(inner.data.clone()))
   }
 }
 
-impl FsReadDirImpl for InMemorySys {
+impl BaseFsReadDir for InMemorySys {
   type ReadDirEntry = InMemoryDirEntry;
 
-  fn fs_read_dir_impl(
+  fn base_fs_read_dir(
     &self,
     path: &Path,
   ) -> std::io::Result<
@@ -703,8 +703,8 @@ impl FsDirEntry for InMemoryDirEntry {
   }
 }
 
-impl FsRemoveFileImpl for InMemorySys {
-  fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseFsRemoveFile for InMemorySys {
+  fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     let mut inner = self.0.write();
     let path = inner.to_absolute_path(path);
     let parent_path = match path.parent() {
@@ -740,8 +740,8 @@ impl FsRemoveFileImpl for InMemorySys {
   }
 }
 
-impl FsRenameImpl for InMemorySys {
-  fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+impl BaseFsRename for InMemorySys {
+  fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     let mut inner = self.0.write();
     let from = inner.to_absolute_path(from.as_ref());
     let to = inner.to_absolute_path(to.as_ref());
@@ -842,18 +842,18 @@ impl FsRenameImpl for InMemorySys {
   }
 }
 
-impl FsSymlinkDirImpl for InMemorySys {
-  fn fs_symlink_dir_impl(
+impl BaseFsSymlinkDir for InMemorySys {
+  fn base_fs_symlink_dir(
     &self,
     original: &Path,
     link: &Path,
   ) -> std::io::Result<()> {
-    self.fs_symlink_file_impl(original, link)
+    self.base_fs_symlink_file(original, link)
   }
 }
 
-impl FsSymlinkFileImpl for InMemorySys {
-  fn fs_symlink_file_impl(
+impl BaseFsSymlinkFile for InMemorySys {
+  fn base_fs_symlink_file(
     &self,
     original: &Path,
     link: &Path,
@@ -908,8 +908,8 @@ impl FsSymlinkFileImpl for InMemorySys {
   }
 }
 
-impl FsWriteImpl for InMemorySys {
-  fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+impl BaseFsWrite for InMemorySys {
+  fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
     let opts = OpenOptions {
       write: true,
       create: true,

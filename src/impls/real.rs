@@ -155,29 +155,29 @@ impl EnvCurrentDir for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl EnvSetCurrentDirImpl for RealSys {
-  fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseEnvSetCurrentDir for RealSys {
+  fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
     std::env::set_current_dir(path)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl EnvSetCurrentDirImpl for RealSys {
-  fn env_set_current_dir_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseEnvSetCurrentDir for RealSys {
+  fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
     deno_chdir(&wasm_path_to_str(path)).map_err(js_value_to_io_error)
   }
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl EnvVarImpl for RealSys {
-  fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString> {
+impl BaseEnvVar for RealSys {
+  fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     std::env::var_os(key)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl EnvVarImpl for RealSys {
-  fn env_var_os_impl(&self, key: &OsStr) -> Option<OsString> {
+impl BaseEnvVar for RealSys {
+  fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     let key = key.to_str()?;
     let get_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("get"))
       .ok()
@@ -189,15 +189,15 @@ impl EnvVarImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl EnvSetVarImpl for RealSys {
-  fn env_set_var_impl(&self, key: &OsStr, value: &OsStr) {
+impl BaseEnvSetVar for RealSys {
+  fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     std::env::set_var(key, value);
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl EnvSetVarImpl for RealSys {
-  fn env_set_var_impl(&self, key: &OsStr, value: &OsStr) {
+impl BaseEnvSetVar for RealSys {
+  fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     let key = key.to_str().unwrap();
     let value = value.to_str().unwrap();
     let set_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("set"))
@@ -303,9 +303,9 @@ impl EnvHomeDir for RealSys {
 // ==== File System ====
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsCanonicalizeImpl for RealSys {
+impl BaseFsCanonicalize for RealSys {
   #[inline]
-  fn fs_canonicalize_impl(&self, path: &Path) -> Result<PathBuf> {
+  fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
     std::fs::canonicalize(path).map(strip_unc_prefix)
   }
 }
@@ -359,8 +359,8 @@ pub fn strip_unc_prefix(path: PathBuf) -> PathBuf {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsCanonicalizeImpl for RealSys {
-  fn fs_canonicalize_impl(&self, path: &Path) -> Result<PathBuf> {
+impl BaseFsCanonicalize for RealSys {
+  fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
     deno_real_path_sync(&wasm_path_to_str(path))
       .map(wasm_string_to_path)
       .map(strip_unc_prefix)
@@ -369,16 +369,16 @@ impl FsCanonicalizeImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsCreateDirAllImpl for RealSys {
+impl BaseFsCreateDirAll for RealSys {
   #[inline]
-  fn fs_create_dir_all_impl(&self, path: &Path) -> Result<()> {
+  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
     std::fs::create_dir_all(path)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsCreateDirAllImpl for RealSys {
-  fn fs_create_dir_all_impl(&self, path: &Path) -> Result<()> {
+impl BaseFsCreateDirAll for RealSys {
+  fn base_fs_create_dir_all(&self, path: &Path) -> Result<()> {
     let path_str = wasm_path_to_str(path);
 
     // Create the options object for mkdirSync
@@ -397,16 +397,16 @@ impl FsCreateDirAllImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsHardLinkImpl for RealSys {
+impl BaseFsHardLink for RealSys {
   #[inline]
-  fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> Result<()> {
+  fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> Result<()> {
     std::fs::hard_link(src, dst)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsHardLinkImpl for RealSys {
-  fn fs_hard_link_impl(&self, src: &Path, dst: &Path) -> std::io::Result<()> {
+impl BaseFsHardLink for RealSys {
+  fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> std::io::Result<()> {
     let src_str = wasm_path_to_str(src);
     let dst_str = wasm_path_to_str(dst);
 
@@ -489,26 +489,26 @@ impl FsMetadataValue for WasmMetadata {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsMetadataImpl for RealSys {
+impl BaseFsMetadata for RealSys {
   type Metadata = RealFsMetadata;
 
   #[inline]
-  fn fs_metadata_impl(&self, path: &Path) -> Result<Self::Metadata> {
+  fn base_fs_metadata(&self, path: &Path) -> Result<Self::Metadata> {
     std::fs::metadata(path).map(RealFsMetadata)
   }
 
   #[inline]
-  fn fs_symlink_metadata_impl(&self, path: &Path) -> Result<Self::Metadata> {
+  fn base_fs_symlink_metadata(&self, path: &Path) -> Result<Self::Metadata> {
     std::fs::symlink_metadata(path).map(RealFsMetadata)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsMetadataImpl for RealSys {
+impl BaseFsMetadata for RealSys {
   type Metadata = WasmMetadata;
 
   #[inline]
-  fn fs_metadata_impl(&self, path: &Path) -> Result<WasmMetadata> {
+  fn base_fs_metadata(&self, path: &Path) -> Result<WasmMetadata> {
     let s = wasm_path_to_str(path);
     match deno_stat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
@@ -517,7 +517,7 @@ impl FsMetadataImpl for RealSys {
   }
 
   #[inline]
-  fn fs_symlink_metadata_impl(&self, path: &Path) -> Result<WasmMetadata> {
+  fn base_fs_symlink_metadata(&self, path: &Path) -> Result<WasmMetadata> {
     let s = wasm_path_to_str(path);
     match deno_lstat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
@@ -536,10 +536,10 @@ fn parse_date(value: &JsValue) -> Result<SystemTime> {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsOpenImpl for RealSys {
+impl BaseFsOpen for RealSys {
   type File = RealFsFile;
 
-  fn fs_open_impl(
+  fn base_fs_open(
     &self,
     path: &Path,
     options: &OpenOptions,
@@ -567,10 +567,10 @@ impl FsOpenImpl for RealSys {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsOpenImpl for RealSys {
+impl BaseFsOpen for RealSys {
   type File = WasmFile;
 
-  fn fs_open_impl(
+  fn base_fs_open(
     &self,
     path: &Path,
     options: &OpenOptions,
@@ -623,16 +623,16 @@ impl FsOpenImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsReadImpl for RealSys {
+impl BaseFsRead for RealSys {
   #[inline]
-  fn fs_read_impl(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
+  fn base_fs_read(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
     std::fs::read(path).map(Cow::Owned)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsReadImpl for RealSys {
-  fn fs_read_impl(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
+impl BaseFsRead for RealSys {
+  fn base_fs_read(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
     let s = wasm_path_to_str(path);
     let v = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
     let b = js_sys::Uint8Array::new(&v).to_vec();
@@ -664,11 +664,11 @@ impl FsDirEntry for RealFsDirEntry {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsReadDirImpl for RealSys {
+impl BaseFsReadDir for RealSys {
   type ReadDirEntry = RealFsDirEntry;
 
   #[inline]
-  fn fs_read_dir_impl(
+  fn base_fs_read_dir(
     &self,
     path: &Path,
   ) -> std::io::Result<
@@ -680,10 +680,10 @@ impl FsReadDirImpl for RealSys {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsReadDirImpl for RealSys {
+impl BaseFsReadDir for RealSys {
   type ReadDirEntry = WasmFsDirEntry;
 
-  fn fs_read_dir_impl(
+  fn base_fs_read_dir(
     &self,
     path: &Path,
   ) -> std::io::Result<
@@ -749,15 +749,15 @@ impl FsDirEntry for WasmFsDirEntry {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsRemoveDirAllImpl for RealSys {
-  fn fs_remove_dir_all_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseFsRemoveDirAll for RealSys {
+  fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_dir_all(path)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsRemoveDirAllImpl for RealSys {
-  fn fs_remove_dir_all_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseFsRemoveDirAll for RealSys {
+  fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
     let options = js_sys::Object::new();
     js_sys::Reflect::set(
@@ -771,30 +771,30 @@ impl FsRemoveDirAllImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsRemoveFileImpl for RealSys {
-  fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseFsRemoveFile for RealSys {
+  fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsRemoveFileImpl for RealSys {
-  fn fs_remove_file_impl(&self, path: &Path) -> std::io::Result<()> {
+impl BaseFsRemoveFile for RealSys {
+  fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
     deno_remove_sync(&s).map_err(js_value_to_io_error)
   }
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsRenameImpl for RealSys {
-  fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+impl BaseFsRename for RealSys {
+  fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::rename(from, to)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsRenameImpl for RealSys {
-  fn fs_rename_impl(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+impl BaseFsRename for RealSys {
+  fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     let f = wasm_path_to_str(from);
     let t = wasm_path_to_str(to);
     deno_rename_sync(&f, &t).map_err(js_value_to_io_error)
@@ -802,8 +802,8 @@ impl FsRenameImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsSymlinkDirImpl for RealSys {
-  fn fs_symlink_dir_impl(
+impl BaseFsSymlinkDir for RealSys {
+  fn base_fs_symlink_dir(
     &self,
     original: &Path,
     link: &Path,
@@ -820,8 +820,8 @@ impl FsSymlinkDirImpl for RealSys {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsSymlinkDirImpl for RealSys {
-  fn fs_symlink_dir_impl(
+impl BaseFsSymlinkDir for RealSys {
+  fn base_fs_symlink_dir(
     &self,
     original: &Path,
     link: &Path,
@@ -848,8 +848,8 @@ impl FsSymlinkDirImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsSymlinkFileImpl for RealSys {
-  fn fs_symlink_file_impl(
+impl BaseFsSymlinkFile for RealSys {
+  fn base_fs_symlink_file(
     &self,
     original: &Path,
     link: &Path,
@@ -866,8 +866,8 @@ impl FsSymlinkFileImpl for RealSys {
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsSymlinkFileImpl for RealSys {
-  fn fs_symlink_file_impl(
+impl BaseFsSymlinkFile for RealSys {
+  fn base_fs_symlink_file(
     &self,
     original: &Path,
     link: &Path,
@@ -894,16 +894,16 @@ impl FsSymlinkFileImpl for RealSys {
 }
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "wasm")))]
-impl FsWriteImpl for RealSys {
+impl BaseFsWrite for RealSys {
   #[inline]
-  fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+  fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
     std::fs::write(path, data)
   }
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-impl FsWriteImpl for RealSys {
-  fn fs_write_impl(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
+impl BaseFsWrite for RealSys {
+  fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
     deno_write_file_sync(&s, data).map_err(js_value_to_io_error)
   }
