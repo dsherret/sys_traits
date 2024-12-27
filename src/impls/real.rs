@@ -43,7 +43,7 @@ impl EnvUmask for RealSys {
 
     // unfortuantely there's no way to get the umask without setting it
     // temporarily... so we set the value then restore it after
-    let current_umask = umask(0o000 as libc::umask);
+    let current_umask = umask(0o000 as mode_t);
     umask(current_umask);
     Ok(current_umask as u32)
   }
@@ -65,7 +65,7 @@ impl EnvSetUmask for RealSys {
     use libc::mode_t;
     use libc::umask;
 
-    let current_umask = umask(umask as libc::umask);
+    let current_umask = umask(umask as mode_t);
     Ok(current_umask as u32)
   }
 }
