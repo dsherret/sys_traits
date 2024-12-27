@@ -425,7 +425,7 @@ impl EnvHomeDir for InMemorySys {
 impl EnvTempDir for InMemorySys {
   fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
     let inner = self.0.read();
-    if let Some(first_dir) = inner.system_root.get(0) {
+    if let Some(first_dir) = inner.system_root.first() {
       let name = first_dir.name();
       let name = if name.is_empty() { "/" } else { name };
       Ok(PathBuf::from(name).join("tmp"))
