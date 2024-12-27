@@ -239,21 +239,6 @@ pub trait FsMetadataValue: std::fmt::Debug {
   fn modified(&self) -> std::io::Result<SystemTime>;
 }
 
-#[derive(Debug)]
-pub struct BoxedFsMetadataValue(pub Box<dyn FsMetadataValue>);
-
-impl FsMetadataValue for BoxedFsMetadataValue {
-  #[inline]
-  fn file_type(&self) -> FileType {
-    self.0.file_type()
-  }
-
-  #[inline]
-  fn modified(&self) -> std::io::Result<SystemTime> {
-    self.0.modified()
-  }
-}
-
 pub trait FsMetadataImpl {
   type Metadata: FsMetadataValue;
 
@@ -421,35 +406,6 @@ pub trait FsDirEntry: std::fmt::Debug {
   fn path(&self) -> Cow<Path>;
 }
 
-#[derive(Debug)]
-pub struct BoxedFsDirEntry(
-  pub Box<dyn FsDirEntry<Metadata = BoxedFsMetadataValue>>,
-);
-
-impl FsDirEntry for BoxedFsDirEntry {
-  type Metadata = BoxedFsMetadataValue;
-
-  #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
-    self.0.file_name()
-  }
-
-  #[inline]
-  fn file_type(&self) -> std::io::Result<FileType> {
-    self.0.file_type()
-  }
-
-  #[inline]
-  fn metadata(&self) -> std::io::Result<Self::Metadata> {
-    self.0.metadata()
-  }
-
-  #[inline]
-  fn path(&self) -> Cow<Path> {
-    self.0.path()
-  }
-}
-
 pub trait FsReadDirImpl {
   type ReadDirEntry: FsDirEntry;
 
@@ -474,24 +430,6 @@ pub trait FsReadDir: FsReadDirImpl {
 }
 
 impl<T: FsReadDirImpl> FsReadDir for T {}
-
-pub struct BoxedFsReadDirRef<'a>(
-  pub &'a dyn FsReadDirImpl<ReadDirEntry = BoxedFsDirEntry>,
-);
-
-impl FsReadDirImpl for BoxedFsReadDirRef<'_> {
-  type ReadDirEntry = BoxedFsDirEntry;
-
-  #[inline]
-  fn fs_read_dir_impl(
-    &self,
-    path: &Path,
-  ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
-  > {
-    self.0.fs_read_dir_impl(path)
-  }
-}
 
 // == FsRemoveDirAll ==
 
