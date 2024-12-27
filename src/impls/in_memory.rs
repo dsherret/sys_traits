@@ -947,7 +947,7 @@ impl std::io::Seek for InMemoryFile {
       }
       std::io::SeekFrom::End(n) => {
         let inner = self.inner.read();
-        if n * -1 > inner.data.len() as i64 {
+        if -n > inner.data.len() as i64 {
           return Err(Error::new(
             ErrorKind::InvalidInput,
             "Seeking before start of file",
