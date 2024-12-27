@@ -22,6 +22,11 @@ extern "C" {
     -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = chdir, catch)]
   fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = copyFileSync, catch)]
+  fn deno_copy_file_sync(
+    from: &str,
+    to: &str,
+  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
   fn deno_cwd() -> std::result::Result<String, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = linkSync, catch)]
@@ -236,6 +241,15 @@ impl BaseFsCanonicalize for RealSys {
     deno_real_path_sync(&wasm_path_to_str(path))
       .map(wasm_string_to_path)
       .map(strip_unc_prefix)
+      .map_err(js_value_to_io_error)
+  }
+}
+
+impl BaseFsCopy for RealSys {
+  #[inline]
+  fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
+    deno_copy_file_sync(&wasm_path_to_str(from), &wasm_path_to_str(to))
+      .map(|()| 0) // this is fine, nobody uses this return value
       .map_err(js_value_to_io_error)
   }
 }

@@ -182,6 +182,26 @@ pub trait FsCanonicalize: BaseFsCanonicalize {
 
 impl<T: BaseFsCanonicalize> FsCanonicalize for T {}
 
+// == FsCopy ==
+
+pub trait BaseFsCopy {
+  #[doc(hidden)]
+  fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64>;
+}
+
+pub trait FsCopy: BaseFsCopy {
+  #[inline]
+  fn fs_copy(
+    &self,
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+  ) -> std::io::Result<u64> {
+    self.base_fs_copy(from.as_ref(), to.as_ref())
+  }
+}
+
+impl<T: BaseFsCopy> FsCopy for T {}
+
 // == FsCreateDir ==
 
 #[derive(Default, Debug, Clone, Copy)]

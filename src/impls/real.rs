@@ -174,6 +174,13 @@ impl BaseFsCanonicalize for RealSys {
   }
 }
 
+impl BaseFsCopy for RealSys {
+  #[inline]
+  fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
+    fs::copy(from, to)
+  }
+}
+
 impl BaseFsCreateDir for RealSys {
   fn base_fs_create_dir(
     &self,

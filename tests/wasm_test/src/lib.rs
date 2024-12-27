@@ -18,6 +18,7 @@ use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
+use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
@@ -244,6 +245,10 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   } else {
     sys.fs_set_permissions("file.txt", 0o0777).unwrap();
   }
+
+  // copy file
+  sys.fs_copy("file.txt", "copy.txt").unwrap();
+  assert_eq!(sys.fs_read_to_string("copy.txt").unwrap(), "Hello there!");
 
   log("Success!");
 
