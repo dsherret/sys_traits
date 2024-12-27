@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::io::Seek;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -146,7 +147,26 @@ fn run() -> std::io::Result<()> {
     file.write(b" there")?;
   }
 
-  assert_eq!(sys.fs_read_to_string("file.txt")?, "tello there");
+  // now with append off and seeking
+  {
+    let mut file = sys.fs_open(
+      "file.txt",
+      &OpenOptions {
+        write: true,
+        truncate: false,
+        append: false,
+        ..Default::default()
+      },
+    )?;
+    assert_eq!(file.seek(std::io::SeekFrom::End(0))?, 11);
+    assert_eq!(file.write(b"?")?, 1);
+    assert_eq!(file.seek(std::io::SeekFrom::Current(-1))?, 11);
+    assert_eq!(file.write(b"!")?, 1);
+    assert_eq!(file.seek(std::io::SeekFrom::Start(0))?, 0);
+    assert_eq!(file.write(b"H")?, 1);
+  }
+
+  assert_eq!(sys.fs_read_to_string("file.txt")?, "Hello there!");
 
   // system
   let start_time = sys.sys_time_now();
@@ -176,7 +196,7 @@ fn run() -> std::io::Result<()> {
 
   // try writing and reading hard links
   sys.fs_hard_link("file.txt", "hardlink.txt")?;
-  assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "tello there");
+  assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
   log("Success!");
 

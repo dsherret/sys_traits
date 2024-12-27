@@ -119,13 +119,13 @@ extern "C" {
     this: &DenoFsFile,
     offset: i64,
     seek_mode: u32,
-  ) -> std::result::Result<u64, wasm_bindgen::JsValue>;
+  ) -> std::result::Result<u32, wasm_bindgen::JsValue>;
   #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
   fn seek_sync_u64_internal(
     this: &DenoFsFile,
     offset: u64,
     seek_mode: u32,
-  ) -> std::result::Result<u64, wasm_bindgen::JsValue>;
+  ) -> std::result::Result<u32, wasm_bindgen::JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -1001,14 +1001,17 @@ impl std::io::Seek for WasmFile {
       std::io::SeekFrom::Start(offset) => self
         .file
         .seek_sync_u64_internal(offset, 0)
+        .map(|v| v as u64)
         .map_err(js_value_to_io_error),
       std::io::SeekFrom::End(offset) => self
         .file
         .seek_sync_i64_internal(offset, 2)
+        .map(|v| v as u64)
         .map_err(js_value_to_io_error),
       std::io::SeekFrom::Current(offset) => self
         .file
         .seek_sync_i64_internal(offset, 1)
+        .map(|v| v as u64)
         .map_err(js_value_to_io_error),
     }
   }
