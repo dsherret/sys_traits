@@ -1,21 +1,23 @@
+use std::path::PathBuf;
+
+#[cfg(feature = "real")]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RealSys;
+
 #[cfg(feature = "memory")]
 mod in_memory;
-#[cfg(feature = "real")]
+#[cfg(all(feature = "real", not(target_arch = "wasm32"),))]
 mod real;
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+mod wasm;
 
 #[cfg(feature = "memory")]
 pub use in_memory::InMemoryFile;
 #[cfg(feature = "memory")]
 pub use in_memory::InMemorySys;
-#[cfg(feature = "real")]
-pub use real::wasm_path_to_str;
-#[cfg(feature = "real")]
-pub use real::wasm_string_to_path;
-#[cfg(feature = "real")]
-pub use real::RealSys;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub use real::WasmFile;
+pub use wasm::WasmFile;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub type RealFsFile = WasmFile;
@@ -25,3 +27,104 @@ pub type RealFsFile = WasmFile;
   not(feature = "wasm")
 ))]
 pub type RealFsFile = real::RealFsFile;
+
+/// Helper that converts a string to a path for Wasm.
+///
+/// This will handle converting Windows-style paths received from JS
+/// to Unix-style paths that work in Wasm in Rust. This is unfortunately
+/// necessary because Wasm code in Rust uses Unix-style paths and there's
+/// no way to configure it to use Windows style paths when we know we're
+/// running on Windows. This is not perfect, but will make things work in
+/// 99% of scenarios, which is better than not working at all.
+///
+/// See and upvote: https://github.com/rust-lang/rust/issues/66621#issuecomment-2561279536
+#[cfg(feature = "real")]
+pub fn wasm_string_to_path(path: String) -> PathBuf {
+  #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+  {
+    // one day we might have:
+    // but for now, do this hack for windows users
+    if wasm::is_windows() {
+      PathBuf::from("/").join(path.replace("\\", "/"))
+    } else {
+      PathBuf::from(path)
+    }
+  }
+  #[cfg(not(target_arch = "wasm32"))]
+  {
+    PathBuf::from(path)
+  }
+}
+
+/// Helper that converts a path to a string for Wasm. The `wasm` feature
+/// must be enabled for this to work.
+///
+/// This will convert a path to have backslashes for JS on Windows.
+///
+/// See notes on `wasm_string_to_path` for more information.
+#[cfg(feature = "real")]
+pub fn wasm_path_to_str(path: &std::path::Path) -> std::borrow::Cow<str> {
+  #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+  {
+    if wasm::is_windows() {
+      let path = path.to_string_lossy();
+      let path = path.strip_prefix('/').unwrap_or(&path);
+      std::borrow::Cow::Owned(path.replace("\\", "/"))
+    } else {
+      path.to_string_lossy()
+    }
+  }
+  #[cfg(not(target_arch = "wasm32"))]
+  {
+    path.to_string_lossy()
+  }
+}
+
+#[cfg(any(not(windows), not(feature = "strip_unc")))]
+#[inline]
+#[allow(dead_code)]
+pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
+  path
+}
+
+/// Strips the unc prefix (ex. \\?\) from Windows paths.
+#[cfg(all(windows, feature = "strip_unc"))]
+pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
+  use std::path::Component;
+  use std::path::Prefix;
+
+  let mut components = path.components();
+  match components.next() {
+    Some(Component::Prefix(prefix)) => {
+      match prefix.kind() {
+        // \\?\device
+        Prefix::Verbatim(device) => {
+          let mut path = PathBuf::new();
+          path.push(format!(r"\\{}\", device.to_string_lossy()));
+          path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
+          path
+        }
+        // \\?\c:\path
+        Prefix::VerbatimDisk(_) => {
+          let mut path = PathBuf::new();
+          path.push(prefix.as_os_str().to_string_lossy().replace(r"\\?\", ""));
+          path.extend(components);
+          path
+        }
+        // \\?\UNC\hostname\share_name\path
+        Prefix::VerbatimUNC(hostname, share_name) => {
+          let mut path = PathBuf::new();
+          path.push(format!(
+            r"\\{}\{}\",
+            hostname.to_string_lossy(),
+            share_name.to_string_lossy()
+          ));
+          path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
+          path
+        }
+        _ => path,
+      }
+    }
+    _ => path,
+  }
+}

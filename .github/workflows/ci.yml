@@ -50,15 +50,21 @@ jobs:
         run: |
           cargo build --no-default-features
           cargo build --features real
-          cargo build --features real --features libc,winapi
+          cargo build --features real,libc,winapi
           cargo build --features memory
-          cargo build --features real --features getrandom
+          cargo build --features real,getrandom
           cargo build --features getrandom
-          cargo build --features getrandom --features memory
+          cargo build --features getrandom,memory
           cargo build --features strip_unc
           rustup target add wasm32-unknown-unknown
           # builds wasm without wasm feature
           cargo build --target wasm32-unknown-unknown
+
+      - name: Build android linux
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+          rustup target add aarch64-linux-android
+          cargo build --features real,libc,winapi --target aarch64-linux-android
 
       - name: Test
         run: cargo test --all-targets --features real,memory,getrandom,strip_unc,winapi,libc

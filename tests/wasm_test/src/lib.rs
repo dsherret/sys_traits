@@ -1,3 +1,4 @@
+use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
@@ -9,8 +10,10 @@ use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
 use sys_traits::EnvSetCurrentDir;
+use sys_traits::EnvSetUmask;
 use sys_traits::EnvSetVar;
 use sys_traits::EnvTempDir;
+use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
@@ -40,12 +43,12 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub fn run_tests() -> Result<(), JsValue> {
+pub fn run_tests(is_windows: bool) -> Result<(), JsValue> {
   console_error_panic_hook::set_once();
-  run().map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+  run(is_windows).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
 }
 
-fn run() -> std::io::Result<()> {
+fn run(is_windows: bool) -> std::io::Result<()> {
   let sys = RealSys::default();
 
   let _ = sys.fs_remove_dir_all("tests/wasm_test/temp");
@@ -199,6 +202,19 @@ fn run() -> std::io::Result<()> {
   // try writing and reading hard links
   sys.fs_hard_link("file.txt", "hardlink.txt")?;
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
+
+  if is_windows {
+    let err = sys.env_umask().unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+    let err = sys.env_set_umask(0o777).unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+  } else {
+    let original = sys.env_umask().unwrap();
+    let value = sys.env_set_umask(0o777).unwrap();
+    assert_eq!(value, original);
+    let value = sys.env_set_umask(original).unwrap();
+    assert_eq!(value, 0o0777);
+  }
 
   log("Success!");
 

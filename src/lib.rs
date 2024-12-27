@@ -91,6 +91,18 @@ pub trait EnvSetVar: BaseEnvSetVar {
 
 impl<T: BaseEnvSetVar> EnvSetVar for T {}
 
+// == EnvUmask ==
+
+pub trait EnvUmask {
+  fn env_umask(&self) -> std::io::Result<u32>;
+}
+
+// == EnvSetUmask ==
+
+pub trait EnvSetUmask {
+  fn env_set_umask(&self, umask: u32) -> std::io::Result<u32>;
+}
+
 // == EnvCacheDir ==
 
 pub trait EnvCacheDir {
