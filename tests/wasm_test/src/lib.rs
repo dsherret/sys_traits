@@ -10,6 +10,7 @@ use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetVar;
+use sys_traits::EnvTempDir;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
@@ -180,8 +181,9 @@ fn run() -> std::io::Result<()> {
   assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
 
   // just ensure these don't panic
-  _ = sys.env_home_dir();
-  _ = sys.env_cache_dir();
+  assert!(sys.env_home_dir().is_some());
+  assert!(sys.env_cache_dir().is_some());
+  assert!(sys.env_temp_dir().is_ok());
 
   let entries = sys.fs_read_dir(".")?;
   let mut entries = entries.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>();
