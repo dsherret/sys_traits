@@ -19,5 +19,9 @@ pub use real::WasmFile;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub type RealFsFile = WasmFile;
-#[cfg(all(feature = "real", not(target_arch = "wasm32")))]
+#[cfg(all(
+  feature = "real",
+  not(target_arch = "wasm32"),
+  not(feature = "wasm")
+))]
 pub type RealFsFile = real::RealFsFile;

@@ -21,6 +21,8 @@ pub struct InMemoryFile {
   pos: usize,
 }
 
+impl FsFile for InMemoryFile {}
+
 #[derive(Debug)]
 struct FileInner {
   #[allow(dead_code)]
@@ -937,10 +939,37 @@ impl FsFileSetPermissions for InMemoryFile {
   }
 }
 
+impl std::io::Seek for InMemoryFile {
+  fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
+    match pos {
+      std::io::SeekFrom::Start(n) => {
+        self.pos = n as usize;
+      }
+      std::io::SeekFrom::End(n) => {
+        let inner = self.inner.read();
+        if -n > inner.data.len() as i64 {
+          return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "Seeking before start of file",
+          ));
+        }
+        self.pos = (inner.data.len() as i64 + n) as usize;
+      }
+      std::io::SeekFrom::Current(n) => {
+        self.pos = self.pos.wrapping_add(n as usize);
+      }
+    }
+    Ok(self.pos as u64)
+  }
+}
+
 impl std::io::Write for InMemoryFile {
   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
     let time = self.sys.sys_time_now();
     let mut inner = self.inner.write();
+    if self.pos > inner.data.len() {
+      inner.data.resize(self.pos, 0);
+    }
     inner.data.splice(self.pos.., buf.as_ref().iter().cloned());
     inner.modified_time = time;
     self.pos += buf.as_ref().len();
@@ -955,6 +984,9 @@ impl std::io::Write for InMemoryFile {
 impl std::io::Read for InMemoryFile {
   fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
     let inner = self.inner.read();
+    if self.pos > inner.data.len() {
+      return Ok(0);
+    }
     let data = &inner.data[self.pos..];
     let len = std::cmp::min(data.len(), buf.len());
     buf[..len].copy_from_slice(&data[..len]);
@@ -1050,6 +1082,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::io::Seek;
   use std::io::Write;
   use std::path::Path;
   use std::time::Duration;
@@ -1410,5 +1443,104 @@ mod tests {
       sys.fs_read("/empty/file2.txt").unwrap().as_ref(),
       b"Content"
     );
+  }
+
+  #[test]
+  fn test_seek_start() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+    let file_path = "/test/seek.txt";
+    sys.fs_write(file_path, b"abcdef").unwrap();
+
+    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+
+    // Seek to the start of the file
+    let new_pos = file.seek(std::io::SeekFrom::Start(0)).unwrap();
+    assert_eq!(new_pos, 0);
+    assert_eq!(file.pos, 0);
+  }
+
+  #[test]
+  fn test_seek_end() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+    let file_path = "/test/seek.txt";
+    sys.fs_write(file_path, b"abcdef").unwrap();
+
+    let mut file = sys.fs_open(file_path, &OpenOptions::read()).unwrap();
+
+    // Seek to the end of the file
+    let new_pos = file.seek(std::io::SeekFrom::End(0)).unwrap();
+    assert_eq!(new_pos, 6);
+    assert_eq!(file.pos, 6);
+
+    // Seek 2 bytes before the end
+    let new_pos = file.seek(std::io::SeekFrom::End(-2)).unwrap();
+    assert_eq!(new_pos, 4);
+    assert_eq!(file.pos, 4);
+  }
+
+  #[test]
+  fn test_seek_current() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+    let file_path = "/test/seek.txt";
+    sys.fs_write(file_path, b"abcdef").unwrap();
+
+    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+
+    // Seek 2 bytes forward from the start
+    let new_pos = file.seek(std::io::SeekFrom::Current(2)).unwrap();
+    assert_eq!(new_pos, 2);
+    assert_eq!(file.pos, 2);
+
+    // Seek 1 byte backward from the current position
+    let new_pos = file.seek(std::io::SeekFrom::Current(-1)).unwrap();
+    assert_eq!(new_pos, 1);
+    assert_eq!(file.pos, 1);
+  }
+
+  #[test]
+  fn test_seek_before_start_fails() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+    let file_path = "/test/seek.txt";
+    sys.fs_write(file_path, b"abcdef").unwrap();
+
+    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+
+    // Attempt to seek before the start of the file
+    let result = file.seek(std::io::SeekFrom::End(-1000));
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+  }
+
+  #[test]
+  fn test_seek_write_position() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+    let file_path = "/test/seek_write.txt";
+    sys.fs_write(file_path, b"abcdef").unwrap();
+
+    let mut file = sys
+      .fs_open(
+        file_path,
+        &OpenOptions {
+          truncate: false,
+          write: false,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+
+    // Seek to position 3 and write data
+    file.seek(std::io::SeekFrom::Start(3)).unwrap();
+    file.write_all(b"XYZ").unwrap();
+    // Seek then write past the end
+    file.seek(std::io::SeekFrom::End(2)).unwrap();
+    file.write_all(b"a").unwrap();
+
+    let contents = sys.fs_read_to_string(file_path).unwrap();
+    assert_eq!(&*contents, "abcXYZ\0\0a");
   }
 }
