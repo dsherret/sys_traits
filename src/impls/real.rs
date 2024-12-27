@@ -12,24 +12,28 @@ use crate::*;
 // ==== Environment ====
 
 impl EnvCurrentDir for RealSys {
+  #[inline]
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
     std::env::current_dir()
   }
 }
 
 impl BaseEnvSetCurrentDir for RealSys {
+  #[inline]
   fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
     std::env::set_current_dir(path)
   }
 }
 
 impl BaseEnvVar for RealSys {
+  #[inline]
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     std::env::var_os(key)
   }
 }
 
 impl BaseEnvSetVar for RealSys {
+  #[inline]
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     std::env::set_var(key, value);
   }
@@ -101,6 +105,7 @@ impl EnvCacheDir for RealSys {
 
 #[cfg(all(target_os = "windows", feature = "winapi"))]
 impl EnvCacheDir for RealSys {
+  #[inline]
   fn env_cache_dir(&self) -> Option<PathBuf> {
     known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
   }
@@ -143,6 +148,7 @@ impl EnvHomeDir for RealSys {
 
 #[cfg(all(target_os = "windows", feature = "winapi"))]
 impl EnvHomeDir for RealSys {
+  #[inline]
   fn env_home_dir(&self) -> Option<PathBuf> {
     self.env_var_path("USERPROFILE").or_else(|| {
       known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
@@ -151,6 +157,7 @@ impl EnvHomeDir for RealSys {
 }
 
 impl EnvTempDir for RealSys {
+  #[inline]
   fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
     Ok(std::env::temp_dir())
   }
@@ -265,18 +272,22 @@ pub struct RealFsDirEntry(std::fs::DirEntry);
 impl FsDirEntry for RealFsDirEntry {
   type Metadata = RealFsMetadata;
 
+  #[inline]
   fn file_name(&self) -> Cow<OsStr> {
     Cow::Owned(self.0.file_name())
   }
 
+  #[inline]
   fn file_type(&self) -> std::io::Result<FileType> {
     self.0.file_type().map(FileType::from)
   }
 
+  #[inline]
   fn metadata(&self) -> std::io::Result<Self::Metadata> {
     self.0.metadata().map(RealFsMetadata)
   }
 
+  #[inline]
   fn path(&self) -> Cow<Path> {
     Cow::Owned(self.0.path())
   }
@@ -298,20 +309,51 @@ impl BaseFsReadDir for RealSys {
 }
 
 impl BaseFsRemoveDirAll for RealSys {
+  #[inline]
   fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_dir_all(path)
   }
 }
 
 impl BaseFsRemoveFile for RealSys {
+  #[inline]
   fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     std::fs::remove_file(path)
   }
 }
 
 impl BaseFsRename for RealSys {
+  #[inline]
   fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     std::fs::rename(from, to)
+  }
+}
+
+#[cfg(unix)]
+impl BaseFsSetPermissions for RealSys {
+  #[inline]
+  fn base_fs_set_permissions(
+    &self,
+    path: &Path,
+    mode: u32,
+  ) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let permissions = fs::Permissions::from_mode(mode);
+    fs::set_permissions(path, permissions)
+  }
+}
+
+#[cfg(windows)]
+impl BaseFsSetPermissions for RealSys {
+  fn base_fs_set_permissions(
+    &self,
+    _path: &Path,
+    _mode: u32,
+  ) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+      ErrorKind::Unsupported,
+      "cannot set path permissions on Windows",
+    ))
   }
 }
 
@@ -384,6 +426,7 @@ impl FsFileSetPermissions for RealFsFile {
 }
 
 impl std::io::Seek for RealFsFile {
+  #[inline]
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
     self.0.seek(pos)
   }
@@ -427,6 +470,7 @@ impl crate::SystemRandom for RealSys {
 }
 
 impl crate::ThreadSleep for RealSys {
+  #[inline]
   fn thread_sleep(&self, duration: std::time::Duration) {
     std::thread::sleep(duration);
   }

@@ -548,6 +548,29 @@ pub trait FsRename: BaseFsRename {
 
 impl<T: BaseFsRename> FsRename for T {}
 
+// == FsSetPermissions ==
+
+pub trait BaseFsSetPermissions {
+  #[doc(hidden)]
+  fn base_fs_set_permissions(
+    &self,
+    path: &Path,
+    mode: u32,
+  ) -> std::io::Result<()>;
+}
+
+pub trait FsSetPermissions: BaseFsSetPermissions {
+  fn fs_set_permissions(
+    &self,
+    path: impl AsRef<Path>,
+    mode: u32,
+  ) -> std::io::Result<()> {
+    self.base_fs_set_permissions(path.as_ref(), mode)
+  }
+}
+
+impl<T: BaseFsSetPermissions> FsSetPermissions for T {}
+
 // == FsSymlinkDir ==
 
 pub trait BaseFsSymlinkDir {

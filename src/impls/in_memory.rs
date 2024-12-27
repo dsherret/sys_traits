@@ -878,6 +878,17 @@ impl BaseFsRename for InMemorySys {
   }
 }
 
+impl BaseFsSetPermissions for InMemorySys {
+  fn base_fs_set_permissions(
+    &self,
+    path: &Path,
+    mode: u32,
+  ) -> std::io::Result<()> {
+    let mut file = self.base_fs_open(path, &OpenOptions::write())?;
+    file.fs_file_set_permissions(mode)
+  }
+}
+
 impl BaseFsSymlinkDir for InMemorySys {
   fn base_fs_symlink_dir(
     &self,
