@@ -442,7 +442,7 @@ fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {
 
 fn parse_bool_prop(value: &JsValue, prop: &'static str) -> Result<bool> {
   let m = get_prop(value, prop)?;
-  if let Some(bool) = value.as_bool() {
+  if let Some(bool) = m.as_bool() {
     Ok(bool)
   } else if m.is_null() {
     Err(Error::new(
