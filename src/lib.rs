@@ -123,6 +123,11 @@ pub trait EnvTempDir {
 
 // #### FILE SYSTEM ####
 
+#[cfg(windows)]
+type CustomFlagsValue = u32;
+#[cfg(not(windows))]
+type CustomFlagsValue = i32;
+
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
@@ -138,8 +143,10 @@ pub struct OpenOptions {
   pub mode: Option<u32>,
   /// Custom flags to set on Unix or Windows.
   ///
-  /// Note: only provide flags that make sense for the current operating system
-  pub custom_flags: Option<u32>,
+  /// On Windows this is a u32, but on linux it's an i32.
+  ///
+  /// Note: only provide flags that make sense for the current operating system.
+  pub custom_flags: Option<CustomFlagsValue>,
 }
 
 impl OpenOptions {
@@ -216,7 +223,7 @@ impl OpenOptions {
   }
 
   #[inline]
-  pub fn custom_flags(&mut self, flags: u32) -> &mut Self {
+  pub fn custom_flags(&mut self, flags: CustomFlagsValue) -> &mut Self {
     self.custom_flags = Some(flags);
     self
   }
