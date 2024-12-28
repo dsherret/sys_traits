@@ -186,6 +186,19 @@ impl OpenOptions {
     }
   }
 
+  pub fn new_append() -> Self {
+    Self {
+      read: false,
+      write: true,
+      create: false,
+      truncate: false,
+      append: true,
+      create_new: false,
+      mode: None,
+      custom_flags: None,
+    }
+  }
+
   #[inline]
   pub fn read(&mut self) -> &mut Self {
     self.read = true;
@@ -483,7 +496,11 @@ impl<T: BaseFsMetadata> FsMetadata for T {}
 // == FsOpen ==
 
 pub trait FsFile:
-  std::io::Read + std::io::Write + std::io::Seek + FsFileSetPermissions
+  std::io::Read
+  + std::io::Write
+  + std::io::Seek
+  + FsFileSetPermissions
+  + FsFileSetLen
 {
 }
 
@@ -752,6 +769,10 @@ pub trait FsWrite: BaseFsWrite {
 impl<T: BaseFsWrite> FsWrite for T {}
 
 // #### FILE SYSTEM FILE ####
+
+pub trait FsFileSetLen {
+  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()>;
+}
 
 pub trait FsFileSetPermissions {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()>;

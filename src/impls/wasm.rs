@@ -130,6 +130,11 @@ extern "C" {
     offset: u64,
     seek_mode: u32,
   ) -> std::result::Result<u32, wasm_bindgen::JsValue>;
+  #[wasm_bindgen(method, structural, js_name = truncateSync, catch)]
+  fn truncate_sync(
+    this: &DenoFsFile,
+    len: u32,
+  ) -> std::result::Result<(), wasm_bindgen::JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -624,6 +629,15 @@ impl Drop for WasmFile {
 }
 
 impl FsFile for WasmFile {}
+
+impl FsFileSetLen for WasmFile {
+  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
+    self
+      .file
+      .truncate_sync(size as u32)
+      .map_err(js_value_to_io_error)
+  }
+}
 
 impl FsFileSetPermissions for WasmFile {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()> {

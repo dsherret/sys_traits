@@ -431,6 +431,13 @@ pub struct RealFsFile(fs::File);
 
 impl FsFile for RealFsFile {}
 
+impl FsFileSetLen for RealFsFile {
+  #[inline]
+  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
+    self.0.set_len(size)
+  }
+}
+
 impl FsFileSetPermissions for RealFsFile {
   #[inline]
   fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {
