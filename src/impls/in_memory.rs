@@ -657,7 +657,7 @@ impl BaseFsOpen for InMemorySys {
 
 impl BaseFsRead for InMemorySys {
   fn base_fs_read(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>> {
-    let arc_file = self.fs_open(path, &OpenOptions::read())?;
+    let arc_file = self.fs_open(path, &OpenOptions::new_read())?;
     let inner = arc_file.inner.read();
     Ok(Cow::Owned(inner.data.clone()))
   }
@@ -884,7 +884,7 @@ impl BaseFsSetPermissions for InMemorySys {
     path: &Path,
     mode: u32,
   ) -> std::io::Result<()> {
-    let mut file = self.base_fs_open(path, &OpenOptions::write())?;
+    let mut file = self.base_fs_open(path, &OpenOptions::new_write())?;
     file.fs_file_set_permissions(mode)
   }
 }
@@ -965,6 +965,7 @@ impl BaseFsWrite for InMemorySys {
       read: false,
       create_new: false,
       mode: None,
+      custom_flags: None,
     };
     let time_now = self.sys_time_now();
     let file = self.fs_open(path, &opts)?;
@@ -1268,7 +1269,7 @@ mod tests {
 
     let file_path = "/dir/perm_test.txt";
     sys.fs_write(file_path, b"Testing perms").unwrap();
-    let mut file = sys.fs_open(file_path, &OpenOptions::read()).unwrap();
+    let mut file = sys.fs_open(file_path, &OpenOptions::new_read()).unwrap();
     file.fs_file_set_permissions(0o755).unwrap();
 
     let guard = file.inner.read();
@@ -1499,7 +1500,7 @@ mod tests {
     let file_path = "/test/seek.txt";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+    let mut file = sys.fs_open(file_path, &OpenOptions::new_write()).unwrap();
 
     // Seek to the start of the file
     let new_pos = file.seek(std::io::SeekFrom::Start(0)).unwrap();
@@ -1514,7 +1515,7 @@ mod tests {
     let file_path = "/test/seek.txt";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut file = sys.fs_open(file_path, &OpenOptions::read()).unwrap();
+    let mut file = sys.fs_open(file_path, &OpenOptions::new_read()).unwrap();
 
     // Seek to the end of the file
     let new_pos = file.seek(std::io::SeekFrom::End(0)).unwrap();
@@ -1534,7 +1535,7 @@ mod tests {
     let file_path = "/test/seek.txt";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+    let mut file = sys.fs_open(file_path, &OpenOptions::new_write()).unwrap();
 
     // Seek 2 bytes forward from the start
     let new_pos = file.seek(std::io::SeekFrom::Current(2)).unwrap();
@@ -1554,7 +1555,7 @@ mod tests {
     let file_path = "/test/seek.txt";
     sys.fs_write(file_path, b"abcdef").unwrap();
 
-    let mut file = sys.fs_open(file_path, &OpenOptions::write()).unwrap();
+    let mut file = sys.fs_open(file_path, &OpenOptions::new_write()).unwrap();
 
     // Attempt to seek before the start of the file
     let result = file.seek(std::io::SeekFrom::End(-1000));

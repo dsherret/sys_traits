@@ -123,9 +123,15 @@ pub trait EnvTempDir {
 
 // #### FILE SYSTEM ####
 
+#[cfg(windows)]
+type CustomFlagsValue = u32;
+#[cfg(not(windows))]
+type CustomFlagsValue = i32;
+
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+#[non_exhaustive] // so we can add properties without breaking people
 pub struct OpenOptions {
   pub read: bool,
   pub write: bool,
@@ -135,10 +141,20 @@ pub struct OpenOptions {
   pub create_new: bool,
   /// Unix only. Ignored on Windows.
   pub mode: Option<u32>,
+  /// Custom flags to set on Unix or Windows.
+  ///
+  /// On Windows this is a u32, but on Unix it's an i32.
+  ///
+  /// Note: only provide flags that make sense for the current operating system.
+  pub custom_flags: Option<CustomFlagsValue>,
 }
 
 impl OpenOptions {
-  pub fn read() -> Self {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn new_read() -> Self {
     Self {
       read: true,
       write: false,
@@ -147,10 +163,17 @@ impl OpenOptions {
       append: false,
       create_new: false,
       mode: None,
+      custom_flags: None,
     }
   }
 
+  // todo: make this an instance method in the next version
+  #[deprecated(note = "use `new_write` instead")]
   pub fn write() -> Self {
+    Self::new_write()
+  }
+
+  pub fn new_write() -> Self {
     Self {
       read: false,
       write: true,
@@ -159,7 +182,50 @@ impl OpenOptions {
       append: false,
       create_new: false,
       mode: None,
+      custom_flags: None,
     }
+  }
+
+  #[inline]
+  pub fn read(&mut self) -> &mut Self {
+    self.read = true;
+    self
+  }
+
+  #[inline]
+  pub fn create(&mut self) -> &mut Self {
+    self.create = true;
+    self
+  }
+
+  #[inline]
+  pub fn truncate(&mut self) -> &mut Self {
+    self.truncate = true;
+    self
+  }
+
+  #[inline]
+  pub fn append(&mut self) -> &mut Self {
+    self.append = true;
+    self
+  }
+
+  #[inline]
+  pub fn create_new(&mut self) -> &mut Self {
+    self.create_new = true;
+    self
+  }
+
+  #[inline]
+  pub fn mode(&mut self, mode: u32) -> &mut Self {
+    self.mode = Some(mode);
+    self
+  }
+
+  #[inline]
+  pub fn custom_flags(&mut self, flags: CustomFlagsValue) -> &mut Self {
+    self.custom_flags = Some(flags);
+    self
   }
 }
 
@@ -207,10 +273,36 @@ impl<T: BaseFsCopy> FsCopy for T {}
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
+#[non_exhaustive] // so we can add properties without breaking people
 pub struct CreateDirOptions {
   pub recursive: bool,
   /// Unix only. Ignored on Windows.
   pub mode: Option<u32>,
+}
+
+impl CreateDirOptions {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn new_recursive() -> Self {
+    Self {
+      recursive: true,
+      ..Default::default()
+    }
+  }
+
+  #[inline]
+  pub fn recursive(&mut self) -> &mut Self {
+    self.recursive = true;
+    self
+  }
+
+  #[inline]
+  pub fn mode(&mut self, mode: u32) -> &mut Self {
+    self.mode = Some(mode);
+    self
+  }
 }
 
 pub trait BaseFsCreateDir {

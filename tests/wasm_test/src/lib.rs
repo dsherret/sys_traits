@@ -67,13 +67,9 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     )
     .unwrap_err();
   assert_eq!(err.kind(), ErrorKind::NotFound); // because not recursive
-  sys.fs_create_dir(
-    "tests/wasm_test/temp/sub/sub/sub",
-    &CreateDirOptions {
-      recursive: true, // ok because recursive
-      mode: Some(0o755),
-    },
-  )?;
+  let mut options = CreateDirOptions::default();
+  options.recursive().mode(0o755);
+  sys.fs_create_dir("tests/wasm_test/temp/sub/sub/sub", &options)?;
 
   // random
   let mut data = [0; 10];
@@ -124,35 +120,27 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   assert!(sys.fs_exists_no_err("file.txt"));
 
   // open an existing file with create_new
-  let err = sys
-    .fs_open(
-      "file.txt",
-      &OpenOptions {
-        create_new: true,
-        create: true,
-        write: true,
-        ..Default::default()
-      },
-    )
-    .unwrap_err();
-  assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+  {
+    let mut open_options = OpenOptions::default();
+    open_options.create_new = true;
+    open_options.create = true;
+    open_options.write = true;
+    let err = sys.fs_open("file.txt", &open_options).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+  }
 
   // open existing file with truncate off
   {
-    let mut file = sys.fs_open(
-      "file.txt",
-      &OpenOptions {
-        write: true,
-        truncate: false,
-        append: false,
-        ..Default::default()
-      },
-    )?;
+    let mut open_options = OpenOptions::default();
+    open_options.write = true;
+    open_options.truncate = false;
+    open_options.append = false;
+    let mut file = sys.fs_open("file.txt", &open_options)?;
     file.write(b"t")?;
   }
   // now open for reading
   {
-    let mut file = sys.fs_open("file.txt", &OpenOptions::read())?;
+    let mut file = sys.fs_open("file.txt", &OpenOptions::new_read())?;
     let mut text = String::new();
     file.read_to_string(&mut text)?;
     assert_eq!(text, "tello");
@@ -160,29 +148,21 @@ fn run(is_windows: bool) -> std::io::Result<()> {
 
   // now append with truncate off
   {
-    let mut file = sys.fs_open(
-      "file.txt",
-      &OpenOptions {
-        write: true,
-        truncate: false,
-        append: true,
-        ..Default::default()
-      },
-    )?;
+    let mut open_options = OpenOptions::default();
+    open_options.write = true;
+    open_options.truncate = false;
+    open_options.append = true;
+    let mut file = sys.fs_open("file.txt", &open_options)?;
     file.write(b" there")?;
   }
 
   // now with append off and seeking
   {
-    let mut file = sys.fs_open(
-      "file.txt",
-      &OpenOptions {
-        write: true,
-        truncate: false,
-        append: false,
-        ..Default::default()
-      },
-    )?;
+    let mut open_options = OpenOptions::default();
+    open_options.write = true;
+    open_options.truncate = false;
+    open_options.append = false;
+    let mut file = sys.fs_open("file.txt", &open_options)?;
     assert_eq!(file.seek(std::io::SeekFrom::End(0))?, 11);
     assert_eq!(file.write(b"?")?, 1);
     assert_eq!(file.seek(std::io::SeekFrom::Current(-1))?, 11);
