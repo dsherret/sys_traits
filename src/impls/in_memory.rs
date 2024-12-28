@@ -979,6 +979,14 @@ impl BaseFsWrite for InMemorySys {
 
 // File System File
 
+impl FsFileSetLen for InMemoryFile {
+  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
+    let mut inner = self.inner.write();
+    inner.data.resize(size as usize, 0);
+    Ok(())
+  }
+}
+
 impl FsFileSetPermissions for InMemoryFile {
   fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()> {
     let mut inner = self.inner.write();

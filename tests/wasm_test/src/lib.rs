@@ -22,6 +22,7 @@ use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
+use sys_traits::FsFileSetLen;
 use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
@@ -229,6 +230,28 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   // copy file
   sys.fs_copy("file.txt", "copy.txt").unwrap();
   assert_eq!(sys.fs_read_to_string("copy.txt").unwrap(), "Hello there!");
+
+  // open and set length below
+  {
+    let mut options = OpenOptions::new_write();
+    options.truncate = false;
+    let mut fs_file = sys.fs_open("copy.txt", &options)?;
+    fs_file.fs_file_set_len(5)?;
+    drop(fs_file);
+    assert_eq!(sys.fs_read_to_string("copy.txt").unwrap(), "Hello");
+  }
+  // open and set length above
+  {
+    let mut options = OpenOptions::new_write();
+    options.truncate = false;
+    let mut fs_file = sys.fs_open("copy.txt", &options)?;
+    fs_file.fs_file_set_len(10)?;
+    drop(fs_file);
+    assert_eq!(
+      sys.fs_read_to_string("copy.txt").unwrap(),
+      format!("Hello{}", "\0".repeat(5))
+    );
+  }
 
   log("Success!");
 

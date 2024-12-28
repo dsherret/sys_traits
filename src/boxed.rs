@@ -8,6 +8,7 @@ use crate::BaseFsReadDir;
 use crate::FileType;
 use crate::FsDirEntry;
 use crate::FsFile;
+use crate::FsFileSetLen;
 use crate::FsFileSetPermissions;
 use crate::FsMetadataValue;
 use crate::OpenOptions;
@@ -39,6 +40,13 @@ impl std::io::Write for BoxedFsFile {
   #[inline]
   fn flush(&mut self) -> std::io::Result<()> {
     self.0.flush()
+  }
+}
+
+impl FsFileSetLen for BoxedFsFile {
+  #[inline]
+  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
+    self.0.fs_file_set_len(size)
   }
 }
 
