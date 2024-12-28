@@ -227,6 +227,26 @@ macro_rules! unix_metadata_prop {
   };
 }
 
+macro_rules! unix_metadata_file_type_prop {
+  ($id:ident, $type:ident) => {
+    #[inline]
+    fn $id(&self) -> Result<$type> {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::FileTypeExt;
+        Ok(self.0.file_type().$id())
+      }
+      #[cfg(not(unix))]
+      {
+        Err(Error::new(
+          ErrorKind::Unsupported,
+          concat!(stringify!($id), " is not supported on this platform"),
+        ))
+      }
+    }
+  };
+}
+
 /// A wrapper type is used in order to force usages to
 /// `use sys_traits::FsMetadataValue` so that the code
 /// compiles under Wasm.
@@ -287,10 +307,10 @@ impl FsMetadataValue for RealFsMetadata {
   unix_metadata_prop!(rdev, u64);
   unix_metadata_prop!(blksize, u64);
   unix_metadata_prop!(blocks, u64);
-  unix_metadata_prop!(is_block_device, bool);
-  unix_metadata_prop!(is_char_device, bool);
-  unix_metadata_prop!(is_fifo, bool);
-  unix_metadata_prop!(is_socket, bool);
+  unix_metadata_file_type_prop!(is_block_device, bool);
+  unix_metadata_file_type_prop!(is_char_device, bool);
+  unix_metadata_file_type_prop!(is_fifo, bool);
+  unix_metadata_file_type_prop!(is_socket, bool);
 }
 
 impl BaseFsMetadata for RealSys {
