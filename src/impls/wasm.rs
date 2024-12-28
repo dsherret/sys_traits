@@ -6,7 +6,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use super::strip_unc_prefix;
 use super::wasm_path_to_str;
 use super::wasm_string_to_path;
 use super::RealSys;
@@ -55,6 +54,8 @@ extern "C" {
   fn deno_read_dir_sync(
     path: &str,
   ) -> std::result::Result<js_sys::Iterator, JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readLinkSync, catch)]
+  fn deno_read_link_sync(path: &str) -> std::result::Result<String, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = realPathSync, catch)]
   fn deno_real_path_sync(path: &str) -> std::result::Result<String, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
@@ -234,7 +235,6 @@ impl EnvTempDir for RealSys {
   fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
     node_tmpdir()
       .map(wasm_string_to_path)
-      .map(strip_unc_prefix)
       .map_err(js_value_to_io_error)
   }
 }
@@ -245,7 +245,6 @@ impl BaseFsCanonicalize for RealSys {
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
     deno_real_path_sync(&wasm_path_to_str(path))
       .map(wasm_string_to_path)
-      .map(strip_unc_prefix)
       .map_err(js_value_to_io_error)
   }
 }
@@ -651,6 +650,15 @@ impl BaseFsReadDir for RealSys {
           })
         })
     })))
+  }
+}
+
+impl BaseFsReadLink for RealSys {
+  fn base_fs_read_link(&self, path: &Path) -> io::Result<PathBuf> {
+    let s = wasm_path_to_str(path);
+    deno_read_link_sync(&s)
+      .map(wasm_string_to_path)
+      .map_err(js_value_to_io_error)
   }
 }
 
