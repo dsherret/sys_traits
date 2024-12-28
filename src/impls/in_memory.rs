@@ -25,9 +25,10 @@ impl FsFile for InMemoryFile {}
 
 #[derive(Debug)]
 struct FileInner {
-  #[allow(dead_code)]
-  created_time: SystemTime,
-  modified_time: SystemTime,
+  accessed: SystemTime,
+  created: SystemTime,
+  changed: SystemTime,
+  modified: SystemTime,
   data: Vec<u8>,
   mode: u32,
 }
@@ -54,20 +55,61 @@ impl DirectoryEntry {
     }
   }
 
-  fn modified_time(&self) -> SystemTime {
+  fn file_type(&self) -> FileType {
     match self {
-      DirectoryEntry::File(f) => f.inner.read().modified_time,
-      DirectoryEntry::Directory(d) => d.inner.read().modified_time,
-      DirectoryEntry::Symlink(s) => s.inner.read().modified_time,
+      DirectoryEntry::File(_) => FileType::File,
+      DirectoryEntry::Directory(_) => FileType::Dir,
+      DirectoryEntry::Symlink(_) => FileType::Symlink,
+    }
+  }
+
+  fn len(&self) -> u64 {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().data.len() as u64,
+      DirectoryEntry::Directory(_) => 0,
+      DirectoryEntry::Symlink(_) => 0,
+    }
+  }
+
+  fn accessed(&self) -> SystemTime {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().accessed,
+      DirectoryEntry::Directory(d) => d.inner.read().accessed,
+      DirectoryEntry::Symlink(s) => s.inner.read().accessed,
+    }
+  }
+
+  fn created(&self) -> SystemTime {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().created,
+      DirectoryEntry::Directory(d) => d.inner.read().created,
+      DirectoryEntry::Symlink(s) => s.inner.read().created,
+    }
+  }
+
+  fn changed(&self) -> SystemTime {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().changed,
+      DirectoryEntry::Directory(d) => d.inner.read().changed,
+      DirectoryEntry::Symlink(s) => s.inner.read().changed,
+    }
+  }
+
+  fn modified(&self) -> SystemTime {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().modified,
+      DirectoryEntry::Directory(d) => d.inner.read().modified,
+      DirectoryEntry::Symlink(s) => s.inner.read().modified,
     }
   }
 }
 
 #[derive(Debug)]
 struct SymlinkInner {
-  #[allow(dead_code)]
-  created_time: SystemTime,
-  modified_time: SystemTime,
+  accessed: SystemTime,
+  created: SystemTime,
+  changed: SystemTime,
+  modified: SystemTime,
 }
 
 #[derive(Debug)]
@@ -79,9 +121,10 @@ struct Symlink {
 
 #[derive(Debug)]
 struct DirectoryInner {
-  #[allow(dead_code)]
-  created_time: SystemTime,
-  modified_time: SystemTime,
+  accessed: SystemTime,
+  created: SystemTime,
+  changed: SystemTime,
+  modified: SystemTime,
 }
 
 #[derive(Debug)]
@@ -289,8 +332,10 @@ impl InMemorySysInner {
             let new_dir = Directory {
               name: comp.into_owned(),
               inner: RwLock::new(DirectoryInner {
-                created_time: time,
-                modified_time: time,
+                accessed: time,
+                changed: time,
+                created: time,
+                modified: time,
               }),
               entries: vec![],
             };
@@ -506,17 +551,70 @@ impl BaseFsHardLink for InMemorySys {
 #[derive(Debug, Clone)]
 pub struct InMemoryMetadata {
   file_type: FileType,
+  len: u64,
+  accessed: SystemTime,
+  changed: SystemTime,
+  created: SystemTime,
   modified: SystemTime,
 }
 
+macro_rules! not_supported_metadata_prop {
+  ($id:ident, $type:ident) => {
+    #[inline]
+    fn $id(&self) -> Result<$type> {
+      Err(Error::new(
+        ErrorKind::Unsupported,
+        concat!(stringify!($id), " is not supported on this platform"),
+      ))
+    }
+  };
+}
+
 impl FsMetadataValue for InMemoryMetadata {
+  #[inline]
   fn file_type(&self) -> FileType {
     self.file_type
   }
 
+  #[inline]
+  fn len(&self) -> u64 {
+    self.len
+  }
+
+  #[inline]
+  fn accessed(&self) -> Result<SystemTime> {
+    Ok(self.accessed)
+  }
+
+  #[inline]
+  fn changed(&self) -> Result<SystemTime> {
+    Ok(self.changed)
+  }
+
+  #[inline]
+  fn created(&self) -> Result<SystemTime> {
+    Ok(self.created)
+  }
+
+  #[inline]
   fn modified(&self) -> Result<SystemTime> {
     Ok(self.modified)
   }
+
+  not_supported_metadata_prop!(dev, u64);
+  not_supported_metadata_prop!(ino, u64);
+  not_supported_metadata_prop!(mode, u32);
+  not_supported_metadata_prop!(nlink, u64);
+  not_supported_metadata_prop!(uid, u32);
+  not_supported_metadata_prop!(gid, u32);
+  not_supported_metadata_prop!(rdev, u64);
+  not_supported_metadata_prop!(blksize, u64);
+  not_supported_metadata_prop!(blocks, u64);
+  not_supported_metadata_prop!(is_block_device, bool);
+  not_supported_metadata_prop!(is_char_device, bool);
+  not_supported_metadata_prop!(is_fifo, bool);
+  not_supported_metadata_prop!(is_socket, bool);
+  not_supported_metadata_prop!(file_attributes, u32);
 }
 
 impl BaseFsMetadata for InMemorySys {
@@ -526,12 +624,12 @@ impl BaseFsMetadata for InMemorySys {
     let inner = self.0.read();
     let (_, entry) = inner.lookup_entry(path)?;
     Ok(InMemoryMetadata {
-      file_type: match entry {
-        DirectoryEntry::File(_) => FileType::File,
-        DirectoryEntry::Directory(_) => FileType::Dir,
-        DirectoryEntry::Symlink(_) => FileType::Symlink,
-      },
-      modified: entry.modified_time(),
+      file_type: entry.file_type(),
+      len: entry.len(),
+      accessed: entry.accessed(),
+      changed: entry.changed(),
+      created: entry.created(),
+      modified: entry.modified(),
     })
   }
 
@@ -546,17 +644,24 @@ impl BaseFsMetadata for InMemorySys {
         ErrorKind::NotFound,
         format!("Path not found: '{}'", path.display()),
       )),
-      LookupNoFollowEntry::Symlink { entry, .. } => Ok(InMemoryMetadata {
-        file_type: FileType::Symlink,
-        modified: entry.inner.read().modified_time,
-      }),
+      LookupNoFollowEntry::Symlink { entry, .. } => {
+        let inner = entry.inner.read();
+        Ok(InMemoryMetadata {
+          file_type: FileType::Symlink,
+          len: 0,
+          accessed: inner.accessed,
+          changed: inner.changed,
+          created: inner.created,
+          modified: inner.modified,
+        })
+      }
       LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadata {
-        file_type: match entry {
-          DirectoryEntry::File(_) => FileType::File,
-          DirectoryEntry::Directory(_) => FileType::Dir,
-          DirectoryEntry::Symlink(_) => FileType::Symlink,
-        },
-        modified: entry.modified_time(),
+        file_type: entry.file_type(),
+        len: entry.len(),
+        accessed: entry.accessed(),
+        changed: entry.changed(),
+        created: entry.created(),
+        modified: entry.modified(),
       }),
     }
   }
@@ -610,7 +715,7 @@ impl BaseFsOpen for InMemorySys {
           if options.truncate {
             let mut fi = f.inner.write();
             fi.data.clear();
-            fi.modified_time = time_now;
+            fi.modified = time_now;
           }
           Ok(InMemoryFile {
             sys: self.clone(),
@@ -631,8 +736,10 @@ impl BaseFsOpen for InMemorySys {
         let new_file = File {
           name: file_name.into_owned(),
           inner: Arc::new(RwLock::new(FileInner {
-            created_time: time_now,
-            modified_time: time_now,
+            accessed: time_now,
+            changed: time_now,
+            created: time_now,
+            modified: time_now,
             data: vec![],
             mode: options.mode.unwrap_or(umask),
           })),
@@ -698,6 +805,10 @@ pub struct InMemoryDirEntry {
   name: String,
   path: PathBuf,
   file_type: FileType,
+  len: u64,
+  accessed: SystemTime,
+  created: SystemTime,
+  changed: SystemTime,
   modified: SystemTime,
 }
 
@@ -706,12 +817,12 @@ impl InMemoryDirEntry {
     Self {
       name: entry.name().to_string(),
       path: initial_path.join(entry.name()),
-      file_type: match entry {
-        DirectoryEntry::File(_) => FileType::File,
-        DirectoryEntry::Directory(_) => FileType::Dir,
-        DirectoryEntry::Symlink(_) => FileType::Symlink,
-      },
-      modified: entry.modified_time(),
+      file_type: entry.file_type(),
+      len: entry.len(),
+      accessed: entry.accessed(),
+      changed: entry.changed(),
+      created: entry.created(),
+      modified: entry.modified(),
     }
   }
 }
@@ -730,6 +841,10 @@ impl FsDirEntry for InMemoryDirEntry {
   fn metadata(&self) -> std::io::Result<Self::Metadata> {
     Ok(InMemoryMetadata {
       file_type: self.file_type,
+      len: self.len,
+      accessed: self.accessed,
+      created: self.created,
+      changed: self.changed,
       modified: self.modified,
     })
   }
@@ -931,8 +1046,10 @@ impl BaseFsSymlinkFile for InMemorySys {
           name: file_name.into_owned(),
           target: original.to_path_buf(),
           inner: RwLock::new(SymlinkInner {
-            created_time: time,
-            modified_time: time,
+            accessed: time,
+            changed: time,
+            created: time,
+            modified: time,
           }),
         });
         Ok(())
@@ -944,8 +1061,10 @@ impl BaseFsSymlinkFile for InMemorySys {
             name: file_name.into_owned(),
             target: original.to_path_buf(),
             inner: RwLock::new(SymlinkInner {
-              created_time: time,
-              modified_time: time,
+              accessed: time,
+              changed: time,
+              created: time,
+              modified: time,
             }),
           }),
         );
@@ -972,7 +1091,7 @@ impl BaseFsWrite for InMemorySys {
     let mut inner = file.inner.write();
     inner.data.clear();
     inner.data.extend_from_slice(data.as_ref());
-    inner.modified_time = time_now;
+    inner.modified = time_now;
     Ok(())
   }
 }
@@ -1027,7 +1146,7 @@ impl std::io::Write for InMemoryFile {
       inner.data.resize(self.pos, 0);
     }
     inner.data.splice(self.pos.., buf.as_ref().iter().cloned());
-    inner.modified_time = time;
+    inner.modified = time;
     self.pos += buf.as_ref().len();
     Ok(buf.len())
   }
