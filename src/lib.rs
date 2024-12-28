@@ -431,6 +431,7 @@ pub trait FsMetadataValue: std::fmt::Debug {
   fn is_char_device(&self) -> io::Result<bool>;
   fn is_fifo(&self) -> io::Result<bool>;
   fn is_socket(&self) -> io::Result<bool>;
+  fn file_attributes(&self) -> io::Result<u32>;
 }
 
 pub trait BaseFsMetadata {

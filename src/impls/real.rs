@@ -311,6 +311,21 @@ impl FsMetadataValue for RealFsMetadata {
   unix_metadata_file_type_prop!(is_char_device, bool);
   unix_metadata_file_type_prop!(is_fifo, bool);
   unix_metadata_file_type_prop!(is_socket, bool);
+
+  fn file_attributes(&self) -> io::Result<u32> {
+    #[cfg(windows)]
+    {
+      use std::os::windows::prelude::MetadataExt;
+      Ok(self.0.file_attributes())
+    }
+    #[cfg(not(windows))]
+    {
+      Err(Error::new(
+        ErrorKind::Unsupported,
+        "file_attributes is not supported on this platform",
+      ))
+    }
+  }
 }
 
 impl BaseFsMetadata for RealSys {

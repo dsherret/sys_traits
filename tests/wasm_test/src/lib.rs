@@ -307,6 +307,10 @@ fn run(is_windows: bool) -> std::io::Result<()> {
       assert!(metadata.is_fifo().is_ok());
       assert!(metadata.is_socket().is_ok());
     }
+    assert_eq!(
+      metadata.file_attributes().unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
   }
 
   log("Success!");

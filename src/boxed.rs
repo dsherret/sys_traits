@@ -180,6 +180,11 @@ impl FsMetadataValue for BoxedFsMetadataValue {
   fn is_socket(&self) -> io::Result<bool> {
     self.0.is_socket()
   }
+
+  #[inline]
+  fn file_attributes(&self) -> io::Result<u32> {
+    self.0.file_attributes()
+  }
 }
 
 #[derive(Debug)]

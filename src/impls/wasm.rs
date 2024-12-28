@@ -414,6 +414,13 @@ impl FsMetadataValue for WasmMetadata {
   fn is_socket(&self) -> Result<bool> {
     parse_bool_prop(&self.0, "isSocket")
   }
+
+  fn file_attributes(&self) -> Result<u32> {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      "file_attributes is not supported in wasm",
+    ))
+  }
 }
 
 fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {

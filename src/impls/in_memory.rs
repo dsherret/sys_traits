@@ -558,7 +558,7 @@ pub struct InMemoryMetadata {
   modified: SystemTime,
 }
 
-macro_rules! unix_metadata_prop {
+macro_rules! not_supported_metadata_prop {
   ($id:ident, $type:ident) => {
     #[inline]
     fn $id(&self) -> Result<$type> {
@@ -601,19 +601,20 @@ impl FsMetadataValue for InMemoryMetadata {
     Ok(self.modified)
   }
 
-  unix_metadata_prop!(dev, u64);
-  unix_metadata_prop!(ino, u64);
-  unix_metadata_prop!(mode, u32);
-  unix_metadata_prop!(nlink, u64);
-  unix_metadata_prop!(uid, u32);
-  unix_metadata_prop!(gid, u32);
-  unix_metadata_prop!(rdev, u64);
-  unix_metadata_prop!(blksize, u64);
-  unix_metadata_prop!(blocks, u64);
-  unix_metadata_prop!(is_block_device, bool);
-  unix_metadata_prop!(is_char_device, bool);
-  unix_metadata_prop!(is_fifo, bool);
-  unix_metadata_prop!(is_socket, bool);
+  not_supported_metadata_prop!(dev, u64);
+  not_supported_metadata_prop!(ino, u64);
+  not_supported_metadata_prop!(mode, u32);
+  not_supported_metadata_prop!(nlink, u64);
+  not_supported_metadata_prop!(uid, u32);
+  not_supported_metadata_prop!(gid, u32);
+  not_supported_metadata_prop!(rdev, u64);
+  not_supported_metadata_prop!(blksize, u64);
+  not_supported_metadata_prop!(blocks, u64);
+  not_supported_metadata_prop!(is_block_device, bool);
+  not_supported_metadata_prop!(is_char_device, bool);
+  not_supported_metadata_prop!(is_fifo, bool);
+  not_supported_metadata_prop!(is_socket, bool);
+  not_supported_metadata_prop!(file_attributes, u32);
 }
 
 impl BaseFsMetadata for InMemorySys {
