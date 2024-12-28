@@ -256,6 +256,20 @@ impl BaseFsOpen for RealSys {
       #[cfg(not(unix))]
       let _ = mode;
     }
+    if let Some(flags) = options.custom_flags {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::OpenOptionsExt;
+        builder.custom_flags(flags);
+      }
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::OpenOptionsExt;
+        builder.custom_flags(flags);
+      }
+      #[cfg(all(not(windows), not(unix)))]
+      let _ = flags;
+    }
     builder
       .read(options.read)
       .write(options.write)
