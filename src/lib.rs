@@ -646,6 +646,22 @@ pub trait FsReadLink: BaseFsReadLink {
 
 impl<T: BaseFsReadLink> FsReadLink for T {}
 
+// == FsRemoveDir ==
+
+pub trait BaseFsRemoveDir {
+  #[doc(hidden)]
+  fn base_fs_remove_dir(&self, path: &Path) -> io::Result<()>;
+}
+
+pub trait FsRemoveDir: BaseFsRemoveDir {
+  #[inline]
+  fn fs_remove_dir(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    self.base_fs_remove_dir(path.as_ref())
+  }
+}
+
+impl<T: BaseFsRemoveDir> FsRemoveDir for T {}
+
 // == FsRemoveDirAll ==
 
 pub trait BaseFsRemoveDirAll {
