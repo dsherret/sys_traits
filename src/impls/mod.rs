@@ -42,9 +42,27 @@ pub type RealFsFile = real::RealFsFile;
 pub fn wasm_string_to_path(path: String) -> PathBuf {
   #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
   {
+    fn is_windows_absolute_path(path: &str) -> bool {
+      let mut chars = path.chars();
+      let Some(first_char) = chars.next() else {
+        return false;
+      };
+      if !first_char.is_alphabetic() {
+        return false;
+      }
+      let Some(second_char) = chars.next() else {
+        return false;
+      };
+      if second_char != ':' {
+        return false;
+      }
+      let third_char = chars.next();
+      third_char == Some('\\') || third_char == Some('/')
+    }
+
     // one day we might have:
     // but for now, do this hack for windows users
-    if wasm::is_windows() {
+    if wasm::is_windows() && is_windows_absolute_path(&path) {
       PathBuf::from("/").join(path.replace("\\", "/"))
     } else {
       PathBuf::from(path)

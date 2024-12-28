@@ -29,6 +29,7 @@ use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
 use sys_traits::FsRead;
 use sys_traits::FsReadDir;
+use sys_traits::FsReadLink;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSetPermissions;
@@ -116,6 +117,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   assert!(sys.fs_is_symlink_no_err("link.txt"));
   assert_eq!(sys.fs_read_to_string("link.txt")?, "hello");
   assert_eq!(sys.fs_canonicalize("link.txt")?, temp_dir.join("file.txt"));
+  assert_eq!(sys.fs_read_link("link.txt")?, PathBuf::from("file.txt"));
   sys.fs_remove_file("link.txt")?;
   assert!(!sys.fs_exists_no_err("link.txt"));
   assert!(sys.fs_exists_no_err("file.txt"));

@@ -800,6 +800,24 @@ impl BaseFsReadDir for InMemorySys {
   }
 }
 
+impl BaseFsReadLink for InMemorySys {
+  fn base_fs_read_link(&self, path: &Path) -> io::Result<PathBuf> {
+    let inner = self.0.read();
+    let detail = inner.lookup_entry_detail_no_follow(path)?;
+    match detail {
+      LookupNoFollowEntry::NotFound(path) => Err(Error::new(
+        ErrorKind::NotFound,
+        format!("Path not found: '{}'", path.display()),
+      )),
+      LookupNoFollowEntry::Found { .. } => Err(Error::new(
+        ErrorKind::InvalidInput,
+        format!("Path is not a symlink: '{}'", path.display()),
+      )),
+      LookupNoFollowEntry::Symlink { target_path, .. } => Ok(target_path),
+    }
+  }
+}
+
 #[derive(Debug)]
 pub struct InMemoryDirEntry {
   name: String,

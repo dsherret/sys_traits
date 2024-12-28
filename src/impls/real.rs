@@ -435,6 +435,12 @@ impl BaseFsReadDir for RealSys {
   }
 }
 
+impl BaseFsReadLink for RealSys {
+  fn base_fs_read_link(&self, path: &Path) -> io::Result<PathBuf> {
+    fs::read_link(path)
+  }
+}
+
 impl BaseFsRemoveDirAll for RealSys {
   #[inline]
   fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
