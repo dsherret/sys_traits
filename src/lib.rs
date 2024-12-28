@@ -143,7 +143,7 @@ pub struct OpenOptions {
   pub mode: Option<u32>,
   /// Custom flags to set on Unix or Windows.
   ///
-  /// On Windows this is a u32, but on linux it's an i32.
+  /// On Windows this is a u32, but on Unix it's an i32.
   ///
   /// Note: only provide flags that make sense for the current operating system.
   pub custom_flags: Option<CustomFlagsValue>,
