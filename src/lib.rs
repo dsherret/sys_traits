@@ -286,9 +286,10 @@ impl CreateDirOptions {
   }
 
   pub fn new_recursive() -> Self {
-    let mut options = Self::default();
-    options.recursive = true;
-    options
+    Self {
+      recursive: true,
+      ..Default::default()
+    }
   }
 
   #[inline]
