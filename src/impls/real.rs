@@ -207,6 +207,26 @@ impl BaseFsHardLink for RealSys {
   }
 }
 
+macro_rules! unix_metadata_prop {
+  ($id:ident, $type:ident) => {
+    #[inline]
+    fn $id(&self) -> Result<$type> {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::MetadataExt;
+        Ok(self.0.$id())
+      }
+      #[cfg(not(unix))]
+      {
+        Err(Error::new(
+          ErrorKind::Unsupported,
+          concat!(stringify!($id), " is not supported on this platform"),
+        ))
+      }
+    }
+  };
+}
+
 /// A wrapper type is used in order to force usages to
 /// `use sys_traits::FsMetadataValue` so that the code
 /// compiles under Wasm.
@@ -214,14 +234,63 @@ impl BaseFsHardLink for RealSys {
 pub struct RealFsMetadata(fs::Metadata);
 
 impl FsMetadataValue for RealFsMetadata {
+  #[inline]
   fn file_type(&self) -> FileType {
     self.0.file_type().into()
+  }
+
+  #[inline]
+  fn len(&self) -> u64 {
+    self.0.len()
+  }
+
+  #[inline]
+  fn accessed(&self) -> Result<SystemTime> {
+    self.0.accessed()
+  }
+
+  #[inline]
+  fn changed(&self) -> Result<SystemTime> {
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::MetadataExt;
+      let changed = self.0.ctime();
+      Ok(
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(changed as u64),
+      )
+    }
+    #[cfg(not(unix))]
+    {
+      Err(Error::new(
+        ErrorKind::Unsupported,
+        "ctime is not supported on this platform",
+      ))
+    }
+  }
+
+  #[inline]
+  fn created(&self) -> Result<SystemTime> {
+    self.0.created()
   }
 
   #[inline]
   fn modified(&self) -> Result<SystemTime> {
     self.0.modified()
   }
+
+  unix_metadata_prop!(dev, u64);
+  unix_metadata_prop!(ino, u64);
+  unix_metadata_prop!(mode, u32);
+  unix_metadata_prop!(nlink, u64);
+  unix_metadata_prop!(uid, u32);
+  unix_metadata_prop!(gid, u32);
+  unix_metadata_prop!(rdev, u64);
+  unix_metadata_prop!(blksize, u64);
+  unix_metadata_prop!(blocks, u64);
+  unix_metadata_prop!(is_block_device, bool);
+  unix_metadata_prop!(is_char_device, bool);
+  unix_metadata_prop!(is_fifo, bool);
+  unix_metadata_prop!(is_socket, bool);
 }
 
 impl BaseFsMetadata for RealSys {

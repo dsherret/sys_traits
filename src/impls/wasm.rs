@@ -339,18 +339,195 @@ impl FsMetadataValue for WasmMetadata {
     (&self.0).into()
   }
 
-  fn modified(&self) -> Result<SystemTime> {
-    let m = js_sys::Reflect::get(&self.0, &JsValue::from_str("mtime"))
-      .map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::Other, "Failed to access mtime")
-      })?;
-
-    if m.is_undefined() || m.is_null() {
-      Err(Error::new(ErrorKind::Other, "mtime not found"))
-    } else {
-      parse_date(&m)
-    }
+  fn len(&self) -> u64 {
+    let Ok(m) = js_sys::Reflect::get(&self.0, &JsValue::from_str("size"))
+    else {
+      return 0;
+    };
+    m.as_f64().unwrap_or(0.0) as u64
   }
+
+  fn accessed(&self) -> Result<SystemTime> {
+    parse_date_prop(&self.0, "atime")
+  }
+
+  fn created(&self) -> Result<SystemTime> {
+    parse_date_prop(&self.0, "birthtime")
+  }
+
+  fn changed(&self) -> Result<SystemTime> {
+    parse_date_prop(&self.0, "ctime")
+  }
+
+  fn modified(&self) -> Result<SystemTime> {
+    parse_date_prop(&self.0, "mtime")
+  }
+
+  fn dev(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "dev")
+  }
+
+  fn ino(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "ino")
+  }
+
+  fn mode(&self) -> Result<u32> {
+    parse_u32_prop(&self.0, "mode")
+  }
+
+  fn nlink(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "nlink")
+  }
+
+  fn uid(&self) -> Result<u32> {
+    parse_u32_prop(&self.0, "uid")
+  }
+
+  fn gid(&self) -> Result<u32> {
+    parse_u32_prop(&self.0, "gid")
+  }
+
+  fn rdev(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "rdev")
+  }
+
+  fn blksize(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "blksize")
+  }
+
+  fn blocks(&self) -> Result<u64> {
+    parse_u64_prop(&self.0, "blocks")
+  }
+
+  fn is_block_device(&self) -> Result<bool> {
+    parse_bool_prop(&self.0, "isBlockDevice")
+  }
+
+  fn is_char_device(&self) -> Result<bool> {
+    parse_bool_prop(&self.0, "isCharDevice")
+  }
+
+  fn is_fifo(&self) -> Result<bool> {
+    parse_bool_prop(&self.0, "isFifo")
+  }
+
+  fn is_socket(&self) -> Result<bool> {
+    parse_bool_prop(&self.0, "isSocket")
+  }
+}
+
+fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {
+  let m = get_prop(value, prop)?;
+  if let Some(date) = m.dyn_ref::<js_sys::Date>() {
+    let ms = date.get_time() as u64;
+    Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
+  } else if m.is_null() {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      format!("{} not supported", prop),
+    ))
+  } else if m.is_undefined() {
+    Err(Error::new(ErrorKind::Other, format!("{} not found", prop)))
+  } else {
+    Err(Error::new(ErrorKind::Other, format!("{} not a date", prop)))
+  }
+}
+
+fn parse_bool_prop(value: &JsValue, prop: &'static str) -> Result<bool> {
+  let m = get_prop(value, prop)?;
+  if let Some(bool) = value.as_bool() {
+    Ok(bool)
+  } else if m.is_null() {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      format!("{} not supported", prop),
+    ))
+  } else if m.is_undefined() {
+    Err(Error::new(ErrorKind::Other, format!("{} not found", prop)))
+  } else {
+    Err(Error::new(
+      ErrorKind::Other,
+      format!("Property '{}' is not a boolean", prop),
+    ))
+  }
+}
+
+fn parse_u32_prop(value: &JsValue, prop: &'static str) -> Result<u32> {
+  let m = get_prop(value, prop)?;
+  if let Some(num) = m.as_f64() {
+    if num >= 0.0 && num.fract() == 0.0 && num <= u32::MAX as f64 {
+      Ok(num as u32)
+    } else {
+      Err(Error::new(
+        ErrorKind::Other,
+        format!("{} is out of range for u32", prop),
+      ))
+    }
+  } else if m.is_null() {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      format!("{} not supported", prop),
+    ))
+  } else {
+    Err(Error::new(
+      ErrorKind::Other,
+      format!("{} is not a valid number", prop),
+    ))
+  }
+}
+
+fn parse_u64_prop(value: &JsValue, prop: &'static str) -> Result<u64> {
+  let m = get_prop(value, prop)?;
+  if let Some(bigint) = m.dyn_ref::<js_sys::BigInt>() {
+    if let Some(bigint_f64) = bigint.as_f64() {
+      if bigint_f64 >= 0.0
+        && bigint_f64 <= u64::MAX as f64
+        && bigint_f64.fract() == 0.0
+      {
+        Ok(bigint_f64 as u64)
+      } else {
+        Err(Error::new(
+          ErrorKind::Other,
+          format!("{} is out of range for u64", prop),
+        ))
+      }
+    } else {
+      Err(Error::new(
+        ErrorKind::Other,
+        format!("{} is not a valid u64", prop),
+      ))
+    }
+  } else if let Some(num) = m.as_f64() {
+    if num >= 0.0 && num.fract() == 0.0 && num <= u64::MAX as f64 {
+      Ok(num as u64)
+    } else {
+      Err(Error::new(
+        ErrorKind::Other,
+        format!("{} is out of range for u64", prop),
+      ))
+    }
+  } else if m.is_null() {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      format!("{} not supported", prop),
+    ))
+  } else if m.is_undefined() {
+    Err(Error::new(ErrorKind::Other, format!("{} not found", prop)))
+  } else {
+    Err(Error::new(
+      ErrorKind::Other,
+      format!("{} is not a number or bigint", prop),
+    ))
+  }
+}
+
+fn get_prop(value: &JsValue, prop: &'static str) -> Result<JsValue> {
+  js_sys::Reflect::get(value, &JsValue::from_str(prop)).map_err(|_| {
+    std::io::Error::new(
+      std::io::ErrorKind::Other,
+      format!("Failed to access {}", prop),
+    )
+  })
 }
 
 impl BaseFsMetadata for RealSys {
@@ -373,14 +550,6 @@ impl BaseFsMetadata for RealSys {
       Err(e) => Err(js_value_to_io_error(e)),
     }
   }
-}
-
-fn parse_date(value: &JsValue) -> Result<SystemTime> {
-  let date = value
-    .dyn_ref::<js_sys::Date>()
-    .ok_or_else(|| Error::new(ErrorKind::Other, "value not a date"))?;
-  let ms = date.get_time() as u64;
-  Ok(SystemTime::UNIX_EPOCH + std::time::Duration::from_millis(ms))
 }
 
 impl BaseFsOpen for RealSys {

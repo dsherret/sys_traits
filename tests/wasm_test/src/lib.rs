@@ -252,6 +252,62 @@ fn run(is_windows: bool) -> std::io::Result<()> {
       format!("Hello{}", "\0".repeat(5))
     );
   }
+  // metadata
+  {
+    let metadata = sys.fs_metadata("copy.txt")?;
+    assert_eq!(metadata.len(), 10);
+    assert_eq!(metadata.file_type(), FileType::File);
+    assert!(metadata.accessed().is_ok());
+    assert!(metadata.changed().is_ok());
+    assert!(metadata.created().is_ok());
+    assert!(metadata.modified().is_ok());
+    assert!(metadata.dev().is_ok());
+    assert!(metadata.mode().is_ok());
+
+    if is_windows {
+      assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(
+        metadata.blksize().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+      assert_eq!(
+        metadata.blocks().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+      assert_eq!(
+        metadata.is_block_device().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+      assert_eq!(
+        metadata.is_char_device().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+      assert_eq!(
+        metadata.is_fifo().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+      assert_eq!(
+        metadata.is_socket().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
+    } else {
+      assert!(metadata.ino().is_ok());
+      assert!(metadata.nlink().is_ok());
+      assert!(metadata.uid().is_ok());
+      assert!(metadata.gid().is_ok());
+      assert!(metadata.rdev().is_ok());
+      assert!(metadata.blksize().is_ok());
+      assert!(metadata.blocks().is_ok());
+      assert!(metadata.is_block_device().is_ok());
+      assert!(metadata.is_char_device().is_ok());
+      assert!(metadata.is_fifo().is_ok());
+      assert!(metadata.is_socket().is_ok());
+    }
+  }
 
   log("Success!");
 

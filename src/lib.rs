@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::io;
 use std::io::Error;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -17,19 +18,19 @@ pub mod impls;
 // == EnvCurrentDir ==
 
 pub trait EnvCurrentDir {
-  fn env_current_dir(&self) -> std::io::Result<PathBuf>;
+  fn env_current_dir(&self) -> io::Result<PathBuf>;
 }
 
 // == EnvSetCurrentDir ==
 
 pub trait BaseEnvSetCurrentDir {
   #[doc(hidden)]
-  fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()>;
+  fn base_env_set_current_dir(&self, path: &Path) -> io::Result<()>;
 }
 
 pub trait EnvSetCurrentDir: BaseEnvSetCurrentDir {
   #[inline]
-  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+  fn env_set_current_dir(&self, path: impl AsRef<Path>) -> io::Result<()> {
     self.base_env_set_current_dir(path.as_ref())
   }
 }
@@ -94,13 +95,13 @@ impl<T: BaseEnvSetVar> EnvSetVar for T {}
 // == EnvUmask ==
 
 pub trait EnvUmask {
-  fn env_umask(&self) -> std::io::Result<u32>;
+  fn env_umask(&self) -> io::Result<u32>;
 }
 
 // == EnvSetUmask ==
 
 pub trait EnvSetUmask {
-  fn env_set_umask(&self, umask: u32) -> std::io::Result<u32>;
+  fn env_set_umask(&self, umask: u32) -> io::Result<u32>;
 }
 
 // == EnvCacheDir ==
@@ -118,7 +119,7 @@ pub trait EnvHomeDir {
 // == EnvTempDir ==
 
 pub trait EnvTempDir {
-  fn env_temp_dir(&self) -> std::io::Result<PathBuf>;
+  fn env_temp_dir(&self) -> io::Result<PathBuf>;
 }
 
 // #### FILE SYSTEM ####
@@ -246,15 +247,12 @@ impl OpenOptions {
 
 pub trait BaseFsCanonicalize {
   #[doc(hidden)]
-  fn base_fs_canonicalize(&self, path: &Path) -> std::io::Result<PathBuf>;
+  fn base_fs_canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
 }
 
 pub trait FsCanonicalize: BaseFsCanonicalize {
   #[inline]
-  fn fs_canonicalize(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<PathBuf> {
+  fn fs_canonicalize(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
     self.base_fs_canonicalize(path.as_ref())
   }
 }
@@ -265,7 +263,7 @@ impl<T: BaseFsCanonicalize> FsCanonicalize for T {}
 
 pub trait BaseFsCopy {
   #[doc(hidden)]
-  fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64>;
+  fn base_fs_copy(&self, from: &Path, to: &Path) -> io::Result<u64>;
 }
 
 pub trait FsCopy: BaseFsCopy {
@@ -274,7 +272,7 @@ pub trait FsCopy: BaseFsCopy {
     &self,
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-  ) -> std::io::Result<u64> {
+  ) -> io::Result<u64> {
     self.base_fs_copy(from.as_ref(), to.as_ref())
   }
 }
@@ -324,7 +322,7 @@ pub trait BaseFsCreateDir {
     &self,
     path: &Path,
     options: &CreateDirOptions,
-  ) -> std::io::Result<()>;
+  ) -> io::Result<()>;
 }
 
 pub trait FsCreateDir: BaseFsCreateDir {
@@ -332,7 +330,7 @@ pub trait FsCreateDir: BaseFsCreateDir {
     &self,
     path: impl AsRef<Path>,
     options: &CreateDirOptions,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_create_dir(path.as_ref(), options)
   }
 }
@@ -342,7 +340,7 @@ impl<T: BaseFsCreateDir> FsCreateDir for T {}
 // == FsCreateDirAll ==
 
 pub trait FsCreateDirAll: BaseFsCreateDir {
-  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+  fn fs_create_dir_all(&self, path: impl AsRef<Path>) -> io::Result<()> {
     self.base_fs_create_dir(
       path.as_ref(),
       &CreateDirOptions {
@@ -359,7 +357,7 @@ impl<T: BaseFsCreateDir> FsCreateDirAll for T {}
 
 pub trait BaseFsHardLink {
   #[doc(hidden)]
-  fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> std::io::Result<()>;
+  fn base_fs_hard_link(&self, src: &Path, dst: &Path) -> io::Result<()>;
 }
 
 pub trait FsHardLink: BaseFsHardLink {
@@ -367,7 +365,7 @@ pub trait FsHardLink: BaseFsHardLink {
     &self,
     src: impl AsRef<Path>,
     dst: impl AsRef<Path>,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_hard_link(src.as_ref(), dst.as_ref())
   }
 }
@@ -414,30 +412,42 @@ impl From<std::fs::FileType> for FileType {
 
 pub trait FsMetadataValue: std::fmt::Debug {
   fn file_type(&self) -> FileType;
-  fn modified(&self) -> std::io::Result<SystemTime>;
+  fn len(&self) -> u64;
+  fn accessed(&self) -> io::Result<SystemTime>;
+  fn created(&self) -> io::Result<SystemTime>;
+  fn changed(&self) -> io::Result<SystemTime>;
+  fn modified(&self) -> io::Result<SystemTime>;
+  fn dev(&self) -> io::Result<u64>;
+  fn ino(&self) -> io::Result<u64>;
+  fn mode(&self) -> io::Result<u32>;
+  fn nlink(&self) -> io::Result<u64>;
+  fn uid(&self) -> io::Result<u32>;
+  fn gid(&self) -> io::Result<u32>;
+  fn rdev(&self) -> io::Result<u64>;
+  fn blksize(&self) -> io::Result<u64>;
+  fn blocks(&self) -> io::Result<u64>;
+  fn is_block_device(&self) -> io::Result<bool>;
+  fn is_char_device(&self) -> io::Result<bool>;
+  fn is_fifo(&self) -> io::Result<bool>;
+  fn is_socket(&self) -> io::Result<bool>;
 }
 
 pub trait BaseFsMetadata {
   type Metadata: FsMetadataValue;
 
   #[doc(hidden)]
-  fn base_fs_metadata(&self, path: &Path) -> std::io::Result<Self::Metadata>;
+  fn base_fs_metadata(&self, path: &Path) -> io::Result<Self::Metadata>;
 
   #[doc(hidden)]
-  fn base_fs_symlink_metadata(
-    &self,
-    path: &Path,
-  ) -> std::io::Result<Self::Metadata>;
+  fn base_fs_symlink_metadata(&self, path: &Path)
+    -> io::Result<Self::Metadata>;
 }
 
 /// These two functions are so cloesly related that it becomes verbose to
 /// separate them out into two traits.
 pub trait FsMetadata: BaseFsMetadata {
   #[inline]
-  fn fs_metadata(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::Metadata> {
+  fn fs_metadata(&self, path: impl AsRef<Path>) -> io::Result<Self::Metadata> {
     self.base_fs_metadata(path.as_ref())
   }
 
@@ -445,11 +455,11 @@ pub trait FsMetadata: BaseFsMetadata {
   fn fs_symlink_metadata(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Self::Metadata> {
+  ) -> io::Result<Self::Metadata> {
     self.base_fs_symlink_metadata(path.as_ref())
   }
 
-  fn fs_is_file(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+  fn fs_is_file(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::File)
   }
 
@@ -457,7 +467,7 @@ pub trait FsMetadata: BaseFsMetadata {
     self.fs_is_file(path).unwrap_or(false)
   }
 
-  fn fs_is_dir(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+  fn fs_is_dir(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::Dir)
   }
 
@@ -465,7 +475,7 @@ pub trait FsMetadata: BaseFsMetadata {
     self.fs_is_dir(path).unwrap_or(false)
   }
 
-  fn fs_exists(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+  fn fs_exists(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     match self.fs_symlink_metadata(path) {
       Ok(_) => Ok(true),
       Err(err) => {
@@ -482,7 +492,7 @@ pub trait FsMetadata: BaseFsMetadata {
     self.fs_exists(path).unwrap_or(false)
   }
 
-  fn fs_is_symlink(&self, path: impl AsRef<Path>) -> std::io::Result<bool> {
+  fn fs_is_symlink(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_symlink_metadata(path)?.file_type() == FileType::Symlink)
   }
 
@@ -496,11 +506,7 @@ impl<T: BaseFsMetadata> FsMetadata for T {}
 // == FsOpen ==
 
 pub trait FsFile:
-  std::io::Read
-  + std::io::Write
-  + std::io::Seek
-  + FsFileSetPermissions
-  + FsFileSetLen
+  io::Read + io::Write + io::Seek + FsFileSetPermissions + FsFileSetLen
 {
 }
 
@@ -514,7 +520,7 @@ pub trait BaseFsOpen {
     &self,
     path: &Path,
     options: &OpenOptions,
-  ) -> std::io::Result<Self::File>;
+  ) -> io::Result<Self::File>;
 }
 
 pub trait FsOpen: BaseFsOpen {
@@ -523,7 +529,7 @@ pub trait FsOpen: BaseFsOpen {
     &self,
     path: impl AsRef<Path>,
     options: &OpenOptions,
-  ) -> std::io::Result<Self::File> {
+  ) -> io::Result<Self::File> {
     self.base_fs_open(path.as_ref(), options)
   }
 }
@@ -534,22 +540,19 @@ impl<T: BaseFsOpen> FsOpen for T {}
 
 pub trait BaseFsRead {
   #[doc(hidden)]
-  fn base_fs_read(&self, path: &Path) -> std::io::Result<Cow<'static, [u8]>>;
+  fn base_fs_read(&self, path: &Path) -> io::Result<Cow<'static, [u8]>>;
 }
 
 pub trait FsRead: BaseFsRead {
   #[inline]
-  fn fs_read(
-    &self,
-    path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, [u8]>> {
+  fn fs_read(&self, path: impl AsRef<Path>) -> io::Result<Cow<'static, [u8]>> {
     self.base_fs_read(path.as_ref())
   }
 
   fn fs_read_to_string(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, str>> {
+  ) -> io::Result<Cow<'static, str>> {
     let bytes = self.fs_read(path)?;
     match bytes {
       Cow::Borrowed(bytes) => str::from_utf8(bytes)
@@ -565,7 +568,7 @@ pub trait FsRead: BaseFsRead {
   fn fs_read_to_string_lossy(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<Cow<'static, str>> {
+  ) -> io::Result<Cow<'static, str>> {
     // Like String::from_utf8_lossy but operates on owned values
     #[inline(always)]
     fn string_from_utf8_lossy(buf: Vec<u8>) -> String {
@@ -594,8 +597,8 @@ pub trait FsDirEntry: std::fmt::Debug {
   type Metadata: FsMetadataValue;
 
   fn file_name(&self) -> Cow<OsStr>;
-  fn file_type(&self) -> std::io::Result<FileType>;
-  fn metadata(&self) -> std::io::Result<Self::Metadata>;
+  fn file_type(&self) -> io::Result<FileType>;
+  fn metadata(&self) -> io::Result<Self::Metadata>;
   fn path(&self) -> Cow<Path>;
 }
 
@@ -606,9 +609,7 @@ pub trait BaseFsReadDir {
   fn base_fs_read_dir(
     &self,
     path: &Path,
-  ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
-  >;
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>>;
 }
 
 pub trait FsReadDir: BaseFsReadDir {
@@ -616,9 +617,7 @@ pub trait FsReadDir: BaseFsReadDir {
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
-  > {
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>> {
     self.base_fs_read_dir(path.as_ref())
   }
 }
@@ -629,12 +628,12 @@ impl<T: BaseFsReadDir> FsReadDir for T {}
 
 pub trait BaseFsRemoveDirAll {
   #[doc(hidden)]
-  fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()>;
+  fn base_fs_remove_dir_all(&self, path: &Path) -> io::Result<()>;
 }
 
 pub trait FsRemoveDirAll: BaseFsRemoveDirAll {
   #[inline]
-  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+  fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> io::Result<()> {
     self.base_fs_remove_dir_all(path.as_ref())
   }
 }
@@ -645,12 +644,12 @@ impl<T: BaseFsRemoveDirAll> FsRemoveDirAll for T {}
 
 pub trait BaseFsRemoveFile {
   #[doc(hidden)]
-  fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()>;
+  fn base_fs_remove_file(&self, path: &Path) -> io::Result<()>;
 }
 
 pub trait FsRemoveFile: BaseFsRemoveFile {
   #[inline]
-  fn fs_remove_file(&self, path: impl AsRef<Path>) -> std::io::Result<()> {
+  fn fs_remove_file(&self, path: impl AsRef<Path>) -> io::Result<()> {
     self.base_fs_remove_file(path.as_ref())
   }
 }
@@ -661,7 +660,7 @@ impl<T: BaseFsRemoveFile> FsRemoveFile for T {}
 
 pub trait BaseFsRename {
   #[doc(hidden)]
-  fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()>;
+  fn base_fs_rename(&self, from: &Path, to: &Path) -> io::Result<()>;
 }
 
 pub trait FsRename: BaseFsRename {
@@ -670,7 +669,7 @@ pub trait FsRename: BaseFsRename {
     &self,
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_rename(from.as_ref(), to.as_ref())
   }
 }
@@ -681,11 +680,7 @@ impl<T: BaseFsRename> FsRename for T {}
 
 pub trait BaseFsSetPermissions {
   #[doc(hidden)]
-  fn base_fs_set_permissions(
-    &self,
-    path: &Path,
-    mode: u32,
-  ) -> std::io::Result<()>;
+  fn base_fs_set_permissions(&self, path: &Path, mode: u32) -> io::Result<()>;
 }
 
 pub trait FsSetPermissions: BaseFsSetPermissions {
@@ -693,7 +688,7 @@ pub trait FsSetPermissions: BaseFsSetPermissions {
     &self,
     path: impl AsRef<Path>,
     mode: u32,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_set_permissions(path.as_ref(), mode)
   }
 }
@@ -704,11 +699,8 @@ impl<T: BaseFsSetPermissions> FsSetPermissions for T {}
 
 pub trait BaseFsSymlinkDir {
   #[doc(hidden)]
-  fn base_fs_symlink_dir(
-    &self,
-    original: &Path,
-    link: &Path,
-  ) -> std::io::Result<()>;
+  fn base_fs_symlink_dir(&self, original: &Path, link: &Path)
+    -> io::Result<()>;
 }
 
 pub trait FsSymlinkDir: BaseFsSymlinkDir {
@@ -717,7 +709,7 @@ pub trait FsSymlinkDir: BaseFsSymlinkDir {
     &self,
     original: impl AsRef<Path>,
     link: impl AsRef<Path>,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_symlink_dir(original.as_ref(), link.as_ref())
   }
 }
@@ -732,7 +724,7 @@ pub trait BaseFsSymlinkFile {
     &self,
     original: &Path,
     link: &Path,
-  ) -> std::io::Result<()>;
+  ) -> io::Result<()>;
 }
 
 pub trait FsSymlinkFile: BaseFsSymlinkFile {
@@ -741,7 +733,7 @@ pub trait FsSymlinkFile: BaseFsSymlinkFile {
     &self,
     original: impl AsRef<Path>,
     link: impl AsRef<Path>,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_symlink_file(original.as_ref(), link.as_ref())
   }
 }
@@ -752,7 +744,7 @@ impl<T: BaseFsSymlinkFile> FsSymlinkFile for T {}
 
 pub trait BaseFsWrite {
   #[doc(hidden)]
-  fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()>;
+  fn base_fs_write(&self, path: &Path, data: &[u8]) -> io::Result<()>;
 }
 
 pub trait FsWrite: BaseFsWrite {
@@ -761,7 +753,7 @@ pub trait FsWrite: BaseFsWrite {
     &self,
     path: impl AsRef<Path>,
     data: impl AsRef<[u8]>,
-  ) -> std::io::Result<()> {
+  ) -> io::Result<()> {
     self.base_fs_write(path.as_ref(), data.as_ref())
   }
 }
@@ -771,11 +763,11 @@ impl<T: BaseFsWrite> FsWrite for T {}
 // #### FILE SYSTEM FILE ####
 
 pub trait FsFileSetLen {
-  fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()>;
+  fn fs_file_set_len(&mut self, size: u64) -> io::Result<()>;
 }
 
 pub trait FsFileSetPermissions {
-  fn fs_file_set_permissions(&mut self, mode: u32) -> std::io::Result<()>;
+  fn fs_file_set_permissions(&mut self, mode: u32) -> io::Result<()>;
 }
 
 // #### SYSTEM ####
@@ -785,21 +777,21 @@ pub trait SystemTimeNow {
 }
 
 pub trait SystemRandom {
-  fn sys_random(&self, buf: &mut [u8]) -> std::io::Result<()>;
+  fn sys_random(&self, buf: &mut [u8]) -> io::Result<()>;
 
-  fn sys_random_u8(&self) -> std::io::Result<u8> {
+  fn sys_random_u8(&self) -> io::Result<u8> {
     let mut buf = [0; 1];
     self.sys_random(&mut buf)?;
     Ok(buf[0])
   }
 
-  fn sys_random_u32(&self) -> std::io::Result<u32> {
+  fn sys_random_u32(&self) -> io::Result<u32> {
     let mut buf = [0; 4];
     self.sys_random(&mut buf)?;
     Ok(u32::from_le_bytes(buf))
   }
 
-  fn sys_random_u64(&self) -> std::io::Result<u64> {
+  fn sys_random_u64(&self) -> io::Result<u64> {
     let mut buf = [0; 8];
     self.sys_random(&mut buf)?;
     Ok(u64::from_le_bytes(buf))
