@@ -30,6 +30,7 @@ use sys_traits::FsOpen;
 use sys_traits::FsRead;
 use sys_traits::FsReadDir;
 use sys_traits::FsReadLink;
+use sys_traits::FsRemoveDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSetPermissions;
@@ -313,6 +314,15 @@ fn run(is_windows: bool) -> std::io::Result<()> {
       metadata.file_attributes().unwrap_err().kind(),
       ErrorKind::Unsupported
     );
+  }
+
+  // remove dir
+  {
+    sys.fs_create_dir_all("my_dir/to_remove")?;
+    assert!(sys.fs_remove_dir("my_dir").is_err());
+    sys.fs_remove_dir("my_dir/to_remove")?;
+    sys.fs_remove_dir("my_dir")?;
+    assert!(!sys.fs_exists_no_err("my_dir"));
   }
 
   log("Success!");

@@ -872,6 +872,77 @@ impl FsDirEntry for InMemoryDirEntry {
   }
 }
 
+impl BaseFsRemoveDir for InMemorySys {
+  fn base_fs_remove_dir(&self, path: &Path) -> io::Result<()> {
+    let mut inner = self.0.write();
+    let abs_path = inner.to_absolute_path(path);
+    let parent_path = match abs_path.parent() {
+      Some(p) if !p.as_os_str().is_empty() => p,
+      _ => {
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Cannot remove root or invalid path",
+        ));
+      }
+    };
+    let parent = inner.find_directory_mut(parent_path, false)?;
+    let dir_name = match abs_path.file_name() {
+      Some(n) => n.to_string_lossy(),
+      None => {
+        return Err(Error::new(ErrorKind::Other, "Directory not found"));
+      }
+    };
+
+    match parent.entries.binary_search_by(|e| e.name().cmp(&dir_name)) {
+      Ok(pos) => match &parent.entries[pos] {
+        DirectoryEntry::Directory(dir) => {
+          if !dir.entries.is_empty() {
+            return Err(Error::new(ErrorKind::Other, "Directory is not empty"));
+          }
+          parent.entries.remove(pos);
+          Ok(())
+        }
+        _ => Err(Error::new(ErrorKind::Other, "Not a directory")),
+      },
+      Err(_) => Err(Error::new(ErrorKind::NotFound, "Directory not found")),
+    }
+  }
+}
+
+impl BaseFsRemoveDirAll for InMemorySys {
+  fn base_fs_remove_dir_all(&self, path: &Path) -> io::Result<()> {
+    let mut inner = self.0.write();
+    let abs_path = inner.to_absolute_path(path);
+    let parent_path = match abs_path.parent() {
+      Some(p) if !p.as_os_str().is_empty() => p,
+      _ => {
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Cannot remove root or invalid path",
+        ));
+      }
+    };
+    let parent = inner.find_directory_mut(parent_path, false)?;
+    let dir_name = match abs_path.file_name() {
+      Some(n) => n.to_string_lossy(),
+      None => {
+        return Ok(()); // previously deleted
+      }
+    };
+
+    match parent.entries.binary_search_by(|e| e.name().cmp(&dir_name)) {
+      Ok(pos) => match &parent.entries[pos] {
+        DirectoryEntry::Directory(_) => {
+          parent.entries.remove(pos);
+          Ok(())
+        }
+        _ => Err(Error::new(ErrorKind::Other, "Not a directory")),
+      },
+      Err(_) => Ok(()), // previously deleted
+    }
+  }
+}
+
 impl BaseFsRemoveFile for InMemorySys {
   fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     let mut inner = self.0.write();
@@ -1743,5 +1814,16 @@ mod tests {
     assert!(sys.env_temp_dir().is_err());
     sys.fs_create_dir_all("/test").unwrap();
     assert_eq!(sys.env_temp_dir().unwrap(), PathBuf::from("/tmp"));
+  }
+
+  #[test]
+  fn test_remove_dir() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test/test").unwrap();
+    assert!(sys.fs_remove_dir("/test").is_err());
+    assert!(sys.fs_remove_dir("/test/test").is_ok());
+    sys.fs_create_dir_all("/test/test").unwrap();
+    assert!(sys.fs_remove_dir_all("/test").is_ok());
+    assert!(!sys.fs_exists_no_err("/test"));
   }
 }

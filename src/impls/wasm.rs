@@ -697,6 +697,14 @@ impl FsDirEntry for WasmFsDirEntry {
   }
 }
 
+impl BaseFsRemoveDir for RealSys {
+  fn base_fs_remove_dir(&self, path: &Path) -> std::io::Result<()> {
+    let s = wasm_path_to_str(path);
+    let options = js_sys::Object::new();
+    deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
+  }
+}
+
 impl BaseFsRemoveDirAll for RealSys {
   fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
