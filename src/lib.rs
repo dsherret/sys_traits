@@ -506,7 +506,11 @@ impl<T: BaseFsMetadata> FsMetadata for T {}
 // == FsOpen ==
 
 pub trait FsFile:
-  io::Read + io::Write + io::Seek + FsFileSetPermissions + FsFileSetLen
+  std::io::Read
+  + std::io::Write
+  + std::io::Seek
+  + FsFileSetPermissions
+  + FsFileSetLen
 {
 }
 
