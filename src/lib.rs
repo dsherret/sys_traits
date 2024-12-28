@@ -126,7 +126,7 @@ pub trait EnvTempDir {
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
-#[non_exhaustive]
+#[non_exhaustive] // so we can add properties without breaking people
 pub struct OpenOptions {
   pub read: bool,
   pub write: bool,
@@ -266,7 +266,7 @@ impl<T: BaseFsCopy> FsCopy for T {}
 #[derive(Default, Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
-#[non_exhaustive]
+#[non_exhaustive] // so we can add properties without breaking people
 pub struct CreateDirOptions {
   pub recursive: bool,
   /// Unix only. Ignored on Windows.
