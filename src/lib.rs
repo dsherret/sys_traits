@@ -410,6 +410,7 @@ impl From<std::fs::FileType> for FileType {
   }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait FsMetadataValue: std::fmt::Debug {
   fn file_type(&self) -> FileType;
   fn len(&self) -> u64;
