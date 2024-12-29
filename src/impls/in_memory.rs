@@ -8,8 +8,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-// this entire module was lazily created... needs way more work
-
 use parking_lot::RwLock;
 
 use crate::*;
@@ -100,6 +98,32 @@ impl DirectoryEntry {
       DirectoryEntry::File(f) => f.inner.read().modified,
       DirectoryEntry::Directory(d) => d.inner.read().modified,
       DirectoryEntry::Symlink(s) => s.inner.read().modified,
+    }
+  }
+
+  fn set_filetimes(&self, atime: SystemTime, mtime: SystemTime) {
+    match self {
+      DirectoryEntry::Directory(entry) => {
+        let mut entry = entry.inner.write();
+        entry.accessed = atime;
+        entry.changed = atime;
+        entry.created = atime;
+        entry.modified = mtime;
+      }
+      DirectoryEntry::File(entry) => {
+        let mut entry = entry.inner.write();
+        entry.accessed = atime;
+        entry.changed = atime;
+        entry.created = atime;
+        entry.modified = mtime;
+      }
+      DirectoryEntry::Symlink(symlink) => {
+        let mut inner = symlink.inner.write();
+        inner.accessed = atime;
+        inner.changed = atime;
+        inner.created = atime;
+        inner.modified = mtime;
+      }
     }
   }
 }
@@ -1107,6 +1131,58 @@ impl BaseFsRename for InMemorySys {
       }
     }
     Ok(())
+  }
+}
+
+impl BaseFsSetFileTimes for InMemorySys {
+  fn base_fs_set_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()> {
+    let inner = self.0.read();
+    let entry = inner.lookup_entry_detail(path)?;
+    match entry {
+      LookupEntry::NotFound(path_buf) => Err(Error::new(
+        ErrorKind::NotFound,
+        format!("Path not found: '{}'", path_buf.display()),
+      )),
+      LookupEntry::Found(_, directory_entry) => {
+        directory_entry.set_filetimes(atime, mtime);
+        Ok(())
+      }
+    }
+  }
+}
+
+impl BaseFsSetSymlinkFileTimes for InMemorySys {
+  fn base_fs_set_symlink_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()> {
+    let inner = self.0.read();
+    let entry = inner.lookup_entry_detail_no_follow(path)?;
+    match entry {
+      LookupNoFollowEntry::Symlink { entry, .. } => {
+        let mut inner = entry.inner.write();
+        inner.accessed = atime;
+        inner.changed = atime;
+        inner.created = atime;
+        inner.modified = mtime;
+        Ok(())
+      }
+      LookupNoFollowEntry::NotFound(path) => Err(Error::new(
+        ErrorKind::NotFound,
+        format!("Path not found: '{}'", path.display()),
+      )),
+      LookupNoFollowEntry::Found(_, directory_entry) => {
+        directory_entry.set_filetimes(atime, mtime);
+        Ok(())
+      }
+    }
   }
 }
 

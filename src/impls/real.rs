@@ -58,12 +58,12 @@ impl EnvUmask for RealSys {
   }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(unix))]
 impl EnvUmask for RealSys {
   fn env_umask(&self) -> std::io::Result<u32> {
     Err(std::io::Error::new(
       ErrorKind::Unsupported,
-      "umask is not supported on Windows",
+      "umask is not supported on this platform",
     ))
   }
 }
@@ -82,12 +82,12 @@ impl EnvSetUmask for RealSys {
   }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(not(unix))]
 impl EnvSetUmask for RealSys {
   fn env_set_umask(&self, _umask: u32) -> std::io::Result<u32> {
     Err(std::io::Error::new(
       ErrorKind::Unsupported,
-      "umask is not supported on Windows",
+      "umask is not supported on this platform",
     ))
   }
 }
@@ -527,6 +527,36 @@ impl BaseFsRename for RealSys {
   }
 }
 
+#[cfg(feature = "filetime")]
+impl BaseFsSetFileTimes for RealSys {
+  #[inline]
+  fn base_fs_set_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> Result<()> {
+    let atime = filetime::FileTime::from_system_time(atime);
+    let mtime = filetime::FileTime::from_system_time(mtime);
+    filetime::set_file_times(path, atime, mtime)
+  }
+}
+
+#[cfg(feature = "filetime")]
+impl BaseFsSetSymlinkFileTimes for RealSys {
+  #[inline]
+  fn base_fs_set_symlink_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> Result<()> {
+    let atime = filetime::FileTime::from_system_time(atime);
+    let mtime = filetime::FileTime::from_system_time(mtime);
+    filetime::set_symlink_file_times(path, atime, mtime)
+  }
+}
+
 #[cfg(unix)]
 impl BaseFsSetPermissions for RealSys {
   #[inline]
@@ -541,7 +571,7 @@ impl BaseFsSetPermissions for RealSys {
   }
 }
 
-#[cfg(windows)]
+#[cfg(not(unix))]
 impl BaseFsSetPermissions for RealSys {
   fn base_fs_set_permissions(
     &self,
@@ -550,7 +580,7 @@ impl BaseFsSetPermissions for RealSys {
   ) -> std::io::Result<()> {
     Err(std::io::Error::new(
       ErrorKind::Unsupported,
-      "cannot set path permissions on Windows",
+      "cannot set path permissions on this platform",
     ))
   }
 }

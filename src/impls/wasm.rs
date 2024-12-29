@@ -99,6 +99,12 @@ extern "C" {
   fn date_now() -> f64;
   #[wasm_bindgen(js_namespace = ["globalThis", "crypto"], js_name = getRandomValues, catch)]
   fn get_random_values(buf: &mut [u8]) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = utimeSync, catch)]
+  fn deno_utime_sync(
+    path: &str,
+    atime: js_sys::Date,
+    mtime: js_sys::Date,
+  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = Atomics, js_name = wait)]
   fn atomics_wait(
     i32array: &js_sys::Int32Array,
@@ -276,7 +282,7 @@ impl BaseFsSymlinkChown for RealSys {
   ) -> Result<()> {
     Err(Error::new(
       ErrorKind::Unsupported,
-      "lchown is not supported in Wasm",
+      "fs_symlink_chown is not supported in Wasm",
     ))
   }
 }
@@ -763,6 +769,51 @@ impl BaseFsRename for RealSys {
     let f = wasm_path_to_str(from);
     let t = wasm_path_to_str(to);
     deno_rename_sync(&f, &t).map_err(js_value_to_io_error)
+  }
+}
+
+impl BaseFsSetFileTimes for RealSys {
+  #[inline]
+  fn base_fs_set_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> Result<()> {
+    // js_sys::Date is used because it has more precision than
+    // providing a number, which only has millisecond precision
+
+    let atime = system_time_to_js_date(atime)?;
+    let mtime = system_time_to_js_date(mtime)?;
+    deno_utime_sync(&wasm_path_to_str(path), atime, mtime)
+      .map_err(js_value_to_io_error)
+  }
+}
+
+fn system_time_to_js_date(system_time: SystemTime) -> Result<js_sys::Date> {
+  let duration_since_epoch = system_time
+    .duration_since(SystemTime::UNIX_EPOCH)
+    .map_err(|_| {
+      Error::new(ErrorKind::InvalidInput, "SystemTime before UNIX EPOCH")
+    })?;
+  let millis = duration_since_epoch.as_secs() * 1000
+    + duration_since_epoch.subsec_millis() as u64;
+
+  Ok(js_sys::Date::new(&JsValue::from_f64(millis as f64)))
+}
+
+impl BaseFsSetSymlinkFileTimes for RealSys {
+  #[inline]
+  fn base_fs_set_symlink_file_times(
+    &self,
+    _path: &Path,
+    _atime: SystemTime,
+    _mtime: SystemTime,
+  ) -> Result<()> {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      "fs_set_symlink_file_times is not supported in Wasm",
+    ))
   }
 }
 

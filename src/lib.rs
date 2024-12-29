@@ -766,6 +766,58 @@ pub trait FsRename: BaseFsRename {
 
 impl<T: BaseFsRename> FsRename for T {}
 
+// == FsSetFileTimes ==
+
+pub trait BaseFsSetFileTimes {
+  #[doc(hidden)]
+  fn base_fs_set_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()>;
+}
+
+pub trait FsSetFileTimes: BaseFsSetFileTimes {
+  #[inline]
+  fn fs_set_file_times(
+    &self,
+    path: impl AsRef<Path>,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()> {
+    self.base_fs_set_file_times(path.as_ref(), atime, mtime)
+  }
+}
+
+impl<T: BaseFsSetFileTimes> FsSetFileTimes for T {}
+
+// == FsSetSymlinkFileTimes ==
+
+pub trait BaseFsSetSymlinkFileTimes {
+  #[doc(hidden)]
+  fn base_fs_set_symlink_file_times(
+    &self,
+    path: &Path,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()>;
+}
+
+pub trait FsSetSymlinkFileTimes: BaseFsSetSymlinkFileTimes {
+  #[inline]
+  fn fs_set_symlink_file_times(
+    &self,
+    path: impl AsRef<Path>,
+    atime: SystemTime,
+    mtime: SystemTime,
+  ) -> io::Result<()> {
+    self.base_fs_set_symlink_file_times(path.as_ref(), atime, mtime)
+  }
+}
+
+impl<T: BaseFsSetSymlinkFileTimes> FsSetSymlinkFileTimes for T {}
+
 // == FsSetPermissions ==
 
 pub trait BaseFsSetPermissions {
