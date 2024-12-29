@@ -28,6 +28,8 @@ use sys_traits::FsFileIsTerminal;
 use sys_traits::FsFileLock;
 use sys_traits::FsFileLockMode;
 use sys_traits::FsFileSetLen;
+use sys_traits::FsFileSetTimes;
+use sys_traits::FsFileTimes;
 use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
@@ -343,6 +345,21 @@ fn run(is_windows: bool) -> std::io::Result<()> {
         .kind(),
       ErrorKind::Unsupported
     );
+
+    // now try with opening the file
+    let accessed_time =
+      accessed_time.checked_add(Duration::from_secs(100)).unwrap();
+    let modified_time =
+      modified_time.checked_add(Duration::from_secs(100)).unwrap();
+    let mut file = sys.fs_open("copy.txt", &OpenOptions::new_write())?;
+    let mut file_times = FsFileTimes::new();
+    file_times.accessed(accessed_time);
+    file_times.modified(modified_time);
+    file.fs_file_set_times(file_times)?;
+    drop(file);
+    let metadata = sys.fs_metadata("copy.txt")?;
+    assert_eq!(metadata.accessed()?, accessed_time);
+    assert_eq!(metadata.modified()?, modified_time);
   }
 
   // chown

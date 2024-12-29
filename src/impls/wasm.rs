@@ -157,6 +157,12 @@ extern "C" {
   ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(method, structural, js_name = unlockSync, catch)]
   fn unlock_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = utimeSync, catch)]
+  fn utime_sync(
+    this: &DenoFsFile,
+    atime: js_sys::Date,
+    mtime: js_sys::Date,
+  ) -> std::result::Result<(), JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -961,6 +967,30 @@ impl FsFileSetPermissions for WasmFile {
       return Ok(()); // ignore
     }
     deno_chmod_sync(&self.path, mode).map_err(js_value_to_io_error)
+  }
+}
+
+impl FsFileSetTimes for WasmFile {
+  fn fs_file_set_times(
+    &mut self,
+    file_times: FsFileTimes,
+  ) -> std::io::Result<()> {
+    fn err() -> std::io::Error {
+      std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "must provide both accessed and modified times when setting file times in Wasm",
+      )
+    }
+
+    let FsFileTimes { accessed, modified } = file_times;
+    let atime = accessed.ok_or_else(|| err())?;
+    let mtime = modified.ok_or_else(|| err())?;
+    let atime = system_time_to_js_date(atime)?;
+    let mtime = system_time_to_js_date(mtime)?;
+    self
+      .file
+      .utime_sync(atime, mtime)
+      .map_err(js_value_to_io_error)
   }
 }
 
