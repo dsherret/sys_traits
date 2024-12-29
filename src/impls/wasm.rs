@@ -136,18 +136,27 @@ extern "C" {
     this: &DenoFsFile,
     offset: i64,
     seek_mode: u32,
-  ) -> std::result::Result<u32, wasm_bindgen::JsValue>;
+  ) -> std::result::Result<u32, JsValue>;
   #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
   fn seek_sync_u64_internal(
     this: &DenoFsFile,
     offset: u64,
     seek_mode: u32,
-  ) -> std::result::Result<u32, wasm_bindgen::JsValue>;
+  ) -> std::result::Result<u32, JsValue>;
   #[wasm_bindgen(method, structural, js_name = truncateSync, catch)]
   fn truncate_sync(
     this: &DenoFsFile,
     len: u32,
-  ) -> std::result::Result<(), wasm_bindgen::JsValue>;
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = isTerminal, catch)]
+  fn is_terminal(this: &DenoFsFile) -> std::result::Result<bool, JsValue>;
+  #[wasm_bindgen(method, structural, js_name = lockSync, catch)]
+  fn lock_sync(
+    this: &DenoFsFile,
+    exclusive: bool,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = unlockSync, catch)]
+  fn unlock_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -904,6 +913,38 @@ impl Drop for WasmFile {
 }
 
 impl FsFile for WasmFile {}
+
+impl FsFileAsRaw for WasmFile {}
+
+impl FsFileIsTerminal for WasmFile {
+  #[inline]
+  fn fs_file_is_terminal(&self) -> bool {
+    self.file.is_terminal().unwrap_or(false)
+  }
+}
+
+impl FsFileLock for WasmFile {
+  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+    self
+      .file
+      .lock_sync(match mode {
+        FsFileLockMode::Shared => false,
+        FsFileLockMode::Exclusive => true,
+      })
+      .map_err(js_value_to_io_error)
+  }
+
+  fn fs_file_try_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+    Err(Error::new(
+      ErrorKind::Other,
+      "try_lock is not supported in Wasm",
+    ))
+  }
+
+  fn fs_file_unlock(&self) -> io::Result<()> {
+    self.file.unlock_sync().map_err(js_value_to_io_error)
+  }
+}
 
 impl FsFileSetLen for WasmFile {
   fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {

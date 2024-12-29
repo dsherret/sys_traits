@@ -9,6 +9,10 @@ use crate::BaseFsReadDir;
 use crate::FileType;
 use crate::FsDirEntry;
 use crate::FsFile;
+use crate::FsFileAsRaw;
+use crate::FsFileIsTerminal;
+use crate::FsFileLock;
+use crate::FsFileLockMode;
 use crate::FsFileSetLen;
 use crate::FsFileSetPermissions;
 use crate::FsMetadataValue;
@@ -41,6 +45,44 @@ impl io::Write for BoxedFsFile {
   #[inline]
   fn flush(&mut self) -> io::Result<()> {
     self.0.flush()
+  }
+}
+
+impl FsFileAsRaw for BoxedFsFile {
+  #[cfg(windows)]
+  #[inline]
+  fn fs_file_as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+    self.0.fs_file_as_raw_handle()
+  }
+
+  /// Returns the raw file descriptor on Unix platforms only
+  /// or `None` when the file doesn't support it (ex. in-memory file system).
+  #[cfg(unix)]
+  #[inline]
+  fn fs_file_as_raw_fd(&self) -> Option<std::os::fd::RawFd> {
+    self.0.fs_file_as_raw_fd()
+  }
+}
+
+impl FsFileIsTerminal for BoxedFsFile {
+  #[inline]
+  fn fs_file_is_terminal(&self) -> bool {
+    self.0.fs_file_is_terminal()
+  }
+}
+
+impl FsFileLock for BoxedFsFile {
+  #[inline]
+  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+    self.0.fs_file_lock(mode)
+  }
+  #[inline]
+  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+    self.0.fs_file_try_lock(mode)
+  }
+  #[inline]
+  fn fs_file_unlock(&self) -> io::Result<()> {
+    self.0.fs_file_unlock()
   }
 }
 

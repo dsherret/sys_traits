@@ -24,6 +24,7 @@ use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
+use sys_traits::FsFileIsTerminal;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
@@ -366,6 +367,16 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     sys.fs_remove_dir("my_dir/to_remove")?;
     sys.fs_remove_dir("my_dir")?;
     assert!(!sys.fs_exists_no_err("my_dir"));
+  }
+
+  // is-terminal
+  {
+    let file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
+    assert!(!file.fs_file_is_terminal());
+    if !is_windows {
+      let file = sys.fs_open("/dev/stdout", &OpenOptions::new_write())?;
+      assert!(file.fs_file_is_terminal());
+    }
   }
 
   log("Success!");

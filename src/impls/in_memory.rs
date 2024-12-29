@@ -1276,8 +1276,7 @@ impl BaseFsWrite for InMemorySys {
       append: false,
       read: false,
       create_new: false,
-      mode: None,
-      custom_flags: None,
+      ..Default::default()
     };
     let time_now = self.sys_time_now();
     let file = self.fs_open(path, &opts)?;
@@ -1290,6 +1289,42 @@ impl BaseFsWrite for InMemorySys {
 }
 
 // File System File
+
+impl FsFileAsRaw for InMemoryFile {
+  #[cfg(windows)]
+  #[inline]
+  fn fs_file_as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+    None
+  }
+
+  #[cfg(unix)]
+  #[inline]
+  fn fs_file_as_raw_fd(&self) -> Option<std::os::fd::RawFd> {
+    None
+  }
+}
+
+impl FsFileLock for InMemoryFile {
+  #[inline]
+  fn fs_file_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn fs_file_try_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+    Ok(())
+  }
+  #[inline]
+  fn fs_file_unlock(&self) -> io::Result<()> {
+    Ok(())
+  }
+}
+
+impl FsFileIsTerminal for InMemoryFile {
+  #[inline]
+  fn fs_file_is_terminal(&self) -> bool {
+    false
+  }
+}
 
 impl FsFileSetLen for InMemoryFile {
   fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
