@@ -1008,7 +1008,7 @@ impl FsFileSyncAll for WasmFile {
 impl FsFileSyncData for WasmFile {
   #[inline]
   fn fs_file_sync_data(&mut self) -> io::Result<()> {
-    self.0.sync_data_sync().map_err(js_value_to_io_error)
+    self.file.sync_data_sync().map_err(js_value_to_io_error)
   }
 }
 
