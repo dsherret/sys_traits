@@ -508,6 +508,34 @@ impl BaseFsCanonicalize for InMemorySys {
   }
 }
 
+impl BaseFsChown for InMemorySys {
+  fn base_fs_chown(
+    &self,
+    _path: &Path,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+  ) -> Result<()> {
+    Err(Error::new(
+      ErrorKind::Other,
+      "chown is not supported on this platform",
+    ))
+  }
+}
+
+impl BaseFsLChown for InMemorySys {
+  fn base_fs_lchown(
+    &self,
+    _path: &Path,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+  ) -> Result<()> {
+    Err(Error::new(
+      ErrorKind::Other,
+      "lchown is not supported on this platform",
+    ))
+  }
+}
+
 impl BaseFsCreateDir for InMemorySys {
   fn base_fs_create_dir(
     &self,

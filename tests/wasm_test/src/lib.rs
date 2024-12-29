@@ -18,12 +18,14 @@ use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
+use sys_traits::FsChown;
 use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsHardLink;
+use sys_traits::FsLChown;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
@@ -315,6 +317,20 @@ fn run(is_windows: bool) -> std::io::Result<()> {
       ErrorKind::Unsupported
     );
   }
+
+  // chown
+  if is_windows {
+    assert_eq!(
+      sys.fs_chown("copy.txt", None, None).unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
+  } else {
+    assert!(sys.fs_chown("copy.txt", None, None).is_ok());
+  }
+  assert_eq!(
+    sys.fs_lchown("copy.txt", None, None).unwrap_err().kind(),
+    ErrorKind::Unsupported
+  );
 
   // remove dir
   {

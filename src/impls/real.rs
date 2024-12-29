@@ -174,6 +174,64 @@ impl BaseFsCanonicalize for RealSys {
   }
 }
 
+#[cfg(unix)]
+impl BaseFsChown for RealSys {
+  #[inline]
+  fn base_fs_chown(
+    &self,
+    path: &Path,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()> {
+    std::os::unix::fs::chown(path, uid, gid)
+  }
+}
+
+#[cfg(not(unix))]
+impl BaseFsChown for RealSys {
+  #[inline]
+  fn base_fs_chown(
+    &self,
+    _path: &Path,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+  ) -> io::Result<()> {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      "chown is not supported on this platform",
+    ))
+  }
+}
+
+#[cfg(unix)]
+impl BaseFsLChown for RealSys {
+  #[inline]
+  fn base_fs_lchown(
+    &self,
+    path: &Path,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()> {
+    std::os::unix::fs::lchown(path, uid, gid)
+  }
+}
+
+#[cfg(not(unix))]
+impl BaseFsLChown for RealSys {
+  #[inline]
+  fn base_fs_lchown(
+    &self,
+    _path: &Path,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+  ) -> io::Result<()> {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      "lchown is not supported on this platform",
+    ))
+  }
+}
+
 impl BaseFsCopy for RealSys {
   #[inline]
   fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
