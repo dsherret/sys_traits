@@ -4,7 +4,10 @@ use std::fs;
 use std::io::Result;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::time::SystemTime;
+
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
 
 use super::strip_unc_prefix;
 use super::RealSys;
@@ -272,7 +275,7 @@ macro_rules! unix_metadata_prop {
       #[cfg(unix)]
       {
         use std::os::unix::fs::MetadataExt;
-        Ok(self.0.$id())
+        Ok(self.inner.$id())
       }
       #[cfg(not(unix))]
       {
@@ -280,6 +283,24 @@ macro_rules! unix_metadata_prop {
           ErrorKind::Unsupported,
           concat!(stringify!($id), " is not supported on this platform"),
         ))
+      }
+    }
+  };
+}
+
+macro_rules! unix_win_extra_metadata_prop {
+  ($id:ident, $type:ident) => {
+    #[inline]
+    fn $id(&self) -> Result<$type> {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::MetadataExt;
+        Ok(self.inner.$id())
+      }
+      #[cfg(not(unix))]
+      {
+        let win_extra = self.get_or_init_stat_info()?;
+        Ok(win_extra.$id)
       }
     }
   };
@@ -292,7 +313,7 @@ macro_rules! unix_metadata_file_type_prop {
       #[cfg(unix)]
       {
         use std::os::unix::fs::FileTypeExt;
-        Ok(self.0.file_type().$id())
+        Ok(self.inner.file_type().$id())
       }
       #[cfg(not(unix))]
       {
@@ -305,26 +326,231 @@ macro_rules! unix_metadata_file_type_prop {
   };
 }
 
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy)]
+enum StatKind {
+  Stat,
+  SymlinkStat,
+}
+
+// this information requires opening a file handle, so it's only done once
+#[cfg(windows)]
+#[derive(Debug, Clone, Default)]
+struct WinStatInfo {
+  dev: u64,
+  ctime: Option<SystemTime>,
+  mode: u32,
+}
+
 /// A wrapper type is used in order to force usages to
 /// `use sys_traits::FsMetadataValue` so that the code
 /// compiles under Wasm.
 #[derive(Debug, Clone)]
-pub struct RealFsMetadata(fs::Metadata);
+pub struct RealFsMetadata {
+  inner: fs::Metadata,
+  #[cfg(windows)]
+  path: PathBuf,
+  #[cfg(windows)]
+  kind: StatKind,
+  #[cfg(windows)]
+  stat_info: OnceLock<std::result::Result<WinStatInfo, (ErrorKind, String)>>,
+}
+
+#[cfg(windows)]
+impl RealFsMetadata {
+  pub fn get_or_init_stat_info(&self) -> Result<&WinStatInfo> {
+    let result = self
+      .stat_info
+      .get_or_init(|| {
+        let mut info = WinStatInfo::default();
+        stat_extra(&mut info, &self.path, FILE_FLAG_BACKUP_SEMANTICS)
+          .map(|_| info)
+          .map_err(|err| (err.kind(), err.to_string()))
+      })
+      .as_ref();
+    result.map_err(|(kind, msg)| Error::new(kind.clone(), msg.clone()))
+  }
+}
+
+#[cfg(windows)]
+fn stat_extra(
+  fsstat: &mut WinStatInfo,
+  path: &Path,
+  file_flags: windows_sys::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES,
+) -> Result<()> {
+  use std::ffi::c_int;
+  use std::os::windows::prelude::OsStrExt;
+  use std::time::Duration;
+  use windows_sys::Wdk::Storage::FileSystem::FileAllInformation;
+  use windows_sys::Wdk::Storage::FileSystem::NtQueryInformationFile;
+  use windows_sys::Wdk::Storage::FileSystem::FILE_ALL_INFORMATION;
+  use windows_sys::Win32::Foundation::CloseHandle;
+  use windows_sys::Win32::Foundation::RtlNtStatusToDosError;
+  use windows_sys::Win32::Foundation::ERROR_MORE_DATA;
+  use windows_sys::Win32::Foundation::FALSE;
+  use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+  use windows_sys::Win32::Foundation::NTSTATUS;
+  use windows_sys::Win32::Storage::FileSystem::CreateFileW;
+  use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
+  use windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION;
+  use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
+  use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
+  use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+  use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_DELETE;
+  use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ;
+  use windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE;
+  use windows_sys::Win32::Storage::FileSystem::OPEN_EXISTING;
+  use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
+
+  struct WinHandle(*mut std::ffi::c_void);
+
+  impl Drop for WinHandle {
+    fn drop(&mut self) {
+      // SAFETY: winapi call
+      unsafe {
+        CloseHandle(self.0);
+      }
+    }
+  }
+
+  unsafe fn get_dev(handle: *mut std::ffi::c_void) -> std::io::Result<u64> {
+    let info = {
+      let mut info =
+        std::mem::MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+      if GetFileInformationByHandle(handle, info.as_mut_ptr()) == FALSE {
+        return Err(std::io::Error::last_os_error());
+      }
+
+      info.assume_init()
+    };
+
+    Ok(info.dwVolumeSerialNumber as u64)
+  }
+
+  const WINDOWS_TO_UNIX_EPOCH_SECS: i64 = 11_644_473_600; // Seconds between Windows epoch and Unix epoch
+
+  fn windows_time_to_system_time(windows_time: i64) -> SystemTime {
+    // windows_time is in 100ns intervals since 1601-01-01
+    let secs = windows_time / 10_000_000;
+    let nanos = ((windows_time % 10_000_000) * 100) as u32;
+
+    if secs >= WINDOWS_TO_UNIX_EPOCH_SECS {
+      // Time is after the Unix epoch
+      SystemTime::UNIX_EPOCH
+        + Duration::new((secs - WINDOWS_TO_UNIX_EPOCH_SECS) as u64, nanos)
+    } else {
+      // Time is before the Unix epoch
+      let duration_since_unix =
+        Duration::new((WINDOWS_TO_UNIX_EPOCH_SECS - secs) as u64, nanos);
+      SystemTime::UNIX_EPOCH - duration_since_unix
+    }
+  }
+
+  unsafe fn query_file_information(
+    handle: *mut std::ffi::c_void,
+  ) -> std::result::Result<FILE_ALL_INFORMATION, NTSTATUS> {
+    let mut info = std::mem::MaybeUninit::<FILE_ALL_INFORMATION>::zeroed();
+    let mut io_status_block =
+      std::mem::MaybeUninit::<IO_STATUS_BLOCK>::zeroed();
+    let status = NtQueryInformationFile(
+      handle as _,
+      io_status_block.as_mut_ptr(),
+      info.as_mut_ptr() as *mut _,
+      std::mem::size_of::<FILE_ALL_INFORMATION>() as _,
+      FileAllInformation,
+    );
+
+    if status < 0 {
+      let converted_status = RtlNtStatusToDosError(status);
+
+      // If error more data is returned, then it means that the buffer is too small to get full filename information
+      // to have that we should retry. However, since we only use BasicInformation and StandardInformation, it is fine to ignore it
+      // since struct is populated with other data anyway.
+      // https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntqueryinformationfile#remarksdd
+      if converted_status != ERROR_MORE_DATA {
+        return Err(converted_status as NTSTATUS);
+      }
+    }
+
+    Ok(info.assume_init())
+  }
+
+  // SAFETY: winapi calls
+  unsafe {
+    let mut path: Vec<_> = path.as_os_str().encode_wide().collect();
+    path.push(0);
+    let file_handle = CreateFileW(
+      path.as_ptr(),
+      0,
+      FILE_SHARE_READ | FILE_SHARE_DELETE | FILE_SHARE_WRITE,
+      std::ptr::null_mut(),
+      OPEN_EXISTING,
+      file_flags,
+      std::ptr::null_mut(),
+    );
+    if file_handle == INVALID_HANDLE_VALUE {
+      return Err(std::io::Error::last_os_error().into());
+    }
+    let file_handle = WinHandle(file_handle);
+
+    fsstat.dev = get_dev(file_handle.0)?;
+
+    if let Ok(file_info) = query_file_information(file_handle.0) {
+      fsstat.ctime = Some(windows_time_to_system_time(
+        file_info.BasicInformation.ChangeTime,
+      ));
+
+      if file_info.BasicInformation.FileAttributes
+        & FILE_ATTRIBUTE_REPARSE_POINT
+        != 0
+      {
+        // fsstat.is_symlink = true;
+      }
+
+      const S_IFDIR: c_int = 0o4_0000;
+      const S_IFREG: c_int = 0o10_0000;
+      const S_IREAD: c_int = 0o0400;
+      const S_IWRITE: c_int = 0o0200;
+
+      if file_info.BasicInformation.FileAttributes & FILE_ATTRIBUTE_DIRECTORY
+        != 0
+      {
+        fsstat.mode |= S_IFDIR as u32;
+        // fsstat.size = 0;
+      } else {
+        fsstat.mode |= S_IFREG as u32;
+        // fsstat.size = file_info.StandardInformation.EndOfFile as u64;
+      }
+
+      if file_info.BasicInformation.FileAttributes & FILE_ATTRIBUTE_READONLY
+        != 0
+      {
+        fsstat.mode |= (S_IREAD | (S_IREAD >> 3) | (S_IREAD >> 6)) as u32;
+      } else {
+        fsstat.mode |= ((S_IREAD | S_IWRITE)
+          | ((S_IREAD | S_IWRITE) >> 3)
+          | ((S_IREAD | S_IWRITE) >> 6)) as u32;
+      }
+    }
+
+    Ok(())
+  }
+}
 
 impl FsMetadataValue for RealFsMetadata {
   #[inline]
   fn file_type(&self) -> FileType {
-    self.0.file_type().into()
+    self.inner.file_type().into()
   }
 
   #[inline]
   fn len(&self) -> u64 {
-    self.0.len()
+    self.inner.len()
   }
 
   #[inline]
   fn accessed(&self) -> Result<SystemTime> {
-    self.0.accessed()
+    self.inner.accessed()
   }
 
   #[inline]
@@ -332,33 +558,33 @@ impl FsMetadataValue for RealFsMetadata {
     #[cfg(unix)]
     {
       use std::os::unix::fs::MetadataExt;
-      let changed = self.0.ctime();
+      let changed = self.inner.ctime();
       Ok(
         SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(changed as u64),
       )
     }
     #[cfg(not(unix))]
     {
-      Err(Error::new(
-        ErrorKind::Unsupported,
-        "ctime is not supported on this platform",
-      ))
+      let win_extra = self.get_or_init_stat_info()?;
+      win_extra
+        .ctime
+        .ok_or_else(|| Error::new(ErrorKind::Other, "failed to get ctime"))
     }
   }
 
   #[inline]
   fn created(&self) -> Result<SystemTime> {
-    self.0.created()
+    self.inner.created()
   }
 
   #[inline]
   fn modified(&self) -> Result<SystemTime> {
-    self.0.modified()
+    self.inner.modified()
   }
 
-  unix_metadata_prop!(dev, u64);
+  unix_win_extra_metadata_prop!(dev, u64);
   unix_metadata_prop!(ino, u64);
-  unix_metadata_prop!(mode, u32);
+  unix_win_extra_metadata_prop!(mode, u32);
   unix_metadata_prop!(nlink, u64);
   unix_metadata_prop!(uid, u32);
   unix_metadata_prop!(gid, u32);
@@ -374,7 +600,7 @@ impl FsMetadataValue for RealFsMetadata {
     #[cfg(windows)]
     {
       use std::os::windows::prelude::MetadataExt;
-      Ok(self.0.file_attributes())
+      Ok(self.inner.file_attributes())
     }
     #[cfg(not(windows))]
     {
@@ -391,12 +617,22 @@ impl BaseFsMetadata for RealSys {
 
   #[inline]
   fn base_fs_metadata(&self, path: &Path) -> Result<Self::Metadata> {
-    fs::metadata(path).map(RealFsMetadata)
+    fs::metadata(path).map(|inner| RealFsMetadata {
+      inner,
+      #[cfg(windows)]
+      path: path.to_path_buf(),
+      #[cfg(windows)]
+      kind: StatKind::Stat,
+    })
   }
 
   #[inline]
   fn base_fs_symlink_metadata(&self, path: &Path) -> Result<Self::Metadata> {
-    fs::symlink_metadata(path).map(RealFsMetadata)
+    fs::symlink_metadata(path).map(|inner| RealFsMetadata {
+      inner,
+      #[cfg(windows)]
+      kind: StatKind::SymlinkStat,
+    })
   }
 }
 
@@ -469,7 +705,11 @@ impl FsDirEntry for RealFsDirEntry {
 
   #[inline]
   fn metadata(&self) -> std::io::Result<Self::Metadata> {
-    self.0.metadata().map(RealFsMetadata)
+    self.0.metadata().map(|inner| RealFsMetadata {
+      inner,
+      #[cfg(windows)]
+      kind: StatKind::Stat,
+    })
   }
 
   #[inline]
