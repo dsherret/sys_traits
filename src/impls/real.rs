@@ -717,14 +717,12 @@ fn lock_file(
   mode: FsFileLockMode,
   try_lock: bool,
 ) -> Result<()> {
-  use std::os::unix::io::AsRawFd;
-
   let operation = match mode {
     FsFileLockMode::Shared => libc::LOCK_SH,
     FsFileLockMode::Exclusive => libc::LOCK_EX,
   } | if try_lock { libc::LOCK_NB } else { 0 };
 
-  flock(file, libc::LOCK_UN)
+  flock(file, operation)
 }
 
 #[cfg(all(unix, feature = "libc"))]
