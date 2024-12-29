@@ -259,6 +259,58 @@ pub trait FsCanonicalize: BaseFsCanonicalize {
 
 impl<T: BaseFsCanonicalize> FsCanonicalize for T {}
 
+// == FsChown ==
+
+pub trait BaseFsChown {
+  #[doc(hidden)]
+  fn base_fs_chown(
+    &self,
+    path: &Path,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()>;
+}
+
+pub trait FsChown: BaseFsChown {
+  #[inline]
+  fn fs_chown(
+    &self,
+    path: impl AsRef<Path>,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()> {
+    self.base_fs_chown(path.as_ref(), uid, gid)
+  }
+}
+
+impl<T: BaseFsChown> FsChown for T {}
+
+// == FsLChown ==
+
+pub trait BaseFsLChown {
+  #[doc(hidden)]
+  fn base_fs_lchown(
+    &self,
+    path: &Path,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()>;
+}
+
+pub trait FsLChown: BaseFsLChown {
+  #[inline]
+  fn fs_lchown(
+    &self,
+    path: impl AsRef<Path>,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> io::Result<()> {
+    self.base_fs_lchown(path.as_ref(), uid, gid)
+  }
+}
+
+impl<T: BaseFsLChown> FsLChown for T {}
+
 // == FsCopy ==
 
 pub trait BaseFsCopy {

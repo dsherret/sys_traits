@@ -21,6 +21,12 @@ extern "C" {
     -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = chdir, catch)]
   fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = chownSync, catch)]
+  fn deno_chown_sync(
+    path: &str,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = copyFileSync, catch)]
   fn deno_copy_file_sync(
     from: &str,
@@ -249,6 +255,32 @@ impl BaseFsCanonicalize for RealSys {
   }
 }
 
+impl BaseFsChown for RealSys {
+  fn base_fs_chown(
+    &self,
+    path: &Path,
+    uid: Option<u32>,
+    gid: Option<u32>,
+  ) -> Result<()> {
+    deno_chown_sync(&wasm_path_to_str(path), uid, gid)
+      .map_err(js_value_to_io_error)
+  }
+}
+
+impl BaseFsLChown for RealSys {
+  fn base_fs_lchown(
+    &self,
+    _path: &Path,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+  ) -> Result<()> {
+    Err(Error::new(
+      ErrorKind::Unsupported,
+      "lchown is not supported in Wasm",
+    ))
+  }
+}
+
 impl BaseFsCopy for RealSys {
   #[inline]
   fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
@@ -417,7 +449,7 @@ impl FsMetadataValue for WasmMetadata {
   fn file_attributes(&self) -> Result<u32> {
     Err(Error::new(
       ErrorKind::Unsupported,
-      "file_attributes is not supported in wasm",
+      "file_attributes is not supported in Wasm",
     ))
   }
 }
