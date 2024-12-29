@@ -1306,15 +1306,15 @@ impl FsFileAsRaw for InMemoryFile {
 
 impl FsFileLock for InMemoryFile {
   #[inline]
-  fn fs_file_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
     Ok(())
   }
   #[inline]
-  fn fs_file_try_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_try_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
     Ok(())
   }
   #[inline]
-  fn fs_file_unlock(&self) -> io::Result<()> {
+  fn fs_file_unlock(&mut self) -> io::Result<()> {
     Ok(())
   }
 }
@@ -1351,6 +1351,20 @@ impl FsFileSetTimes for InMemoryFile {
     if let Some(modified) = times.modified {
       inner.modified = modified;
     }
+    Ok(())
+  }
+}
+
+impl FsFileSyncAll for InMemoryFile {
+  #[inline]
+  fn fs_file_sync_all(&mut self) -> io::Result<()> {
+    Ok(())
+  }
+}
+
+impl FsFileSyncData for InMemoryFile {
+  #[inline]
+  fn fs_file_sync_data(&mut self) -> io::Result<()> {
     Ok(())
   }
 }

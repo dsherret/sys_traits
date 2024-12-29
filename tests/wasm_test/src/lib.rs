@@ -29,6 +29,8 @@ use sys_traits::FsFileLock;
 use sys_traits::FsFileLockMode;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsFileSetTimes;
+use sys_traits::FsFileSyncAll;
+use sys_traits::FsFileSyncData;
 use sys_traits::FsFileTimes;
 use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
@@ -408,6 +410,13 @@ fn run(is_windows: bool) -> std::io::Result<()> {
         .kind(),
       ErrorKind::Unsupported
     );
+  }
+
+  // sync_all and sync_data
+  {
+    let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
+    file.fs_file_sync_all()?;
+    file.fs_file_sync_data()?;
   }
 
   log("Success!");

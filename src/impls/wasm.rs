@@ -163,6 +163,10 @@ extern "C" {
     atime: js_sys::Date,
     mtime: js_sys::Date,
   ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = syncSync, catch)]
+  fn sync_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = syncDataSync, catch)]
+  fn sync_data_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
 
   // Deno.build
   #[wasm_bindgen(js_namespace = Deno, js_name = build)]
@@ -930,7 +934,7 @@ impl FsFileIsTerminal for WasmFile {
 }
 
 impl FsFileLock for WasmFile {
-  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
     self
       .file
       .lock_sync(match mode {
@@ -940,14 +944,14 @@ impl FsFileLock for WasmFile {
       .map_err(js_value_to_io_error)
   }
 
-  fn fs_file_try_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_try_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
     Err(Error::new(
       ErrorKind::Unsupported,
       "try_lock is not supported in Wasm",
     ))
   }
 
-  fn fs_file_unlock(&self) -> io::Result<()> {
+  fn fs_file_unlock(&mut self) -> io::Result<()> {
     self.file.unlock_sync().map_err(js_value_to_io_error)
   }
 }
@@ -991,6 +995,20 @@ impl FsFileSetTimes for WasmFile {
       .file
       .utime_sync(atime, mtime)
       .map_err(js_value_to_io_error)
+  }
+}
+
+impl FsFileSyncAll for WasmFile {
+  #[inline]
+  fn fs_file_sync_all(&mut self) -> io::Result<()> {
+    self.file.sync_sync().map_err(js_value_to_io_error)
+  }
+}
+
+impl FsFileSyncData for WasmFile {
+  #[inline]
+  fn fs_file_sync_data(&mut self) -> io::Result<()> {
+    self.0.sync_data_sync().map_err(js_value_to_io_error)
   }
 }
 

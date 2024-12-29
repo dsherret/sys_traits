@@ -597,6 +597,8 @@ pub trait FsFile:
   + FsFileSetPermissions
   + FsFileSetTimes
   + FsFileSetLen
+  + FsFileSyncAll
+  + FsFileSyncData
   + FsFileAsRaw
 {
 }
@@ -959,9 +961,9 @@ pub enum FsFileLockMode {
 }
 
 pub trait FsFileLock {
-  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()>;
-  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()>;
-  fn fs_file_unlock(&self) -> io::Result<()>;
+  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()>;
+  fn fs_file_try_lock(&mut self, mode: FsFileLockMode) -> io::Result<()>;
+  fn fs_file_unlock(&mut self) -> io::Result<()>;
 }
 
 pub trait FsFileSetLen {
@@ -996,6 +998,14 @@ impl FsFileTimes {
 
 pub trait FsFileSetTimes {
   fn fs_file_set_times(&mut self, times: FsFileTimes) -> io::Result<()>;
+}
+
+pub trait FsFileSyncAll {
+  fn fs_file_sync_all(&mut self) -> io::Result<()>;
+}
+
+pub trait FsFileSyncData {
+  fn fs_file_sync_data(&mut self) -> io::Result<()>;
 }
 
 // #### SYSTEM ####
