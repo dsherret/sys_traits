@@ -376,7 +376,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     let file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
     assert!(!file.fs_file_is_terminal());
     if !is_windows {
-      let file = sys.fs_open("/dev/stdout", &OpenOptions::new_write())?;
+      let file = sys.fs_open("/dev/tty6", &OpenOptions::new_write())?;
       assert!(file.fs_file_is_terminal());
     }
   }
