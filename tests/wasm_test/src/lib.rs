@@ -4,6 +4,7 @@ use std::io::Seek;
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
+use std::time::SystemTime;
 
 use sys_traits::impls::RealSys;
 use sys_traits::CreateDirOptions;
@@ -34,7 +35,9 @@ use sys_traits::FsReadLink;
 use sys_traits::FsRemoveDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
+use sys_traits::FsSetFileTimes;
 use sys_traits::FsSetPermissions;
+use sys_traits::FsSetSymlinkFileTimes;
 use sys_traits::FsSymlinkChown;
 use sys_traits::FsSymlinkFile;
 use sys_traits::FsWrite;
@@ -314,6 +317,27 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     }
     assert_eq!(
       metadata.file_attributes().unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
+  }
+
+  // system time
+  {
+    let accessed_time = SystemTime::UNIX_EPOCH
+      .checked_add(Duration::from_secs(100))
+      .unwrap();
+    let modified_time = SystemTime::UNIX_EPOCH
+      .checked_add(Duration::from_secs(10))
+      .unwrap();
+    sys.fs_set_file_times("copy.txt", accessed_time, modified_time)?;
+    let metadata = sys.fs_metadata("copy.txt")?;
+    assert_eq!(metadata.accessed()?, accessed_time);
+    assert_eq!(metadata.modified()?, modified_time);
+    assert_eq!(
+      sys
+        .fs_set_symlink_file_times("copy.txt", accessed_time, modified_time)
+        .unwrap_err()
+        .kind(),
       ErrorKind::Unsupported
     );
   }

@@ -19,6 +19,7 @@ default = []
 libc = ["dep:libc"]
 memory = ["dep:parking_lot"]
 getrandom = ["dep:getrandom"]
+filetime = ["dep:filetime"]
 real = []
 serde = ["dep:serde"]
 serde_json = ["dep:serde_json", "serde"]
@@ -27,6 +28,7 @@ winapi = ["dep:windows-sys"]
 wasm = ["real", "dep:js-sys", "dep:wasm-bindgen"]
 
 [dependencies]
+filetime = { version = "0.2", optional = true }
 parking_lot = { version = "0.12", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
