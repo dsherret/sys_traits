@@ -267,8 +267,8 @@ impl BaseFsChown for RealSys {
   }
 }
 
-impl BaseFsLChown for RealSys {
-  fn base_fs_lchown(
+impl BaseFsSymlinkChown for RealSys {
+  fn base_fs_symlink_chown(
     &self,
     _path: &Path,
     _uid: Option<u32>,
@@ -945,17 +945,10 @@ impl crate::ThreadSleep for RealSys {
     use js_sys::Int32Array;
     use js_sys::SharedArrayBuffer;
 
-    // Create a SharedArrayBuffer and initialize an Int32Array with it
     let sab = SharedArrayBuffer::new(4);
     let int32_array = Int32Array::new(&sab);
-
-    // Set an arbitrary value at index 0
     int32_array.set_index(0, 0);
-
-    // Calculate timeout in milliseconds
     let timeout = duration.as_millis() as f64;
-
-    // Call Atomics.wait to simulate a blocking sleep
     let _result = atomics_wait(&int32_array, 0, 0, timeout);
   }
 }

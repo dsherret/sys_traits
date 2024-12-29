@@ -285,11 +285,11 @@ pub trait FsChown: BaseFsChown {
 
 impl<T: BaseFsChown> FsChown for T {}
 
-// == FsLChown ==
+// == FsSymlinkChown ==
 
-pub trait BaseFsLChown {
+pub trait BaseFsSymlinkChown {
   #[doc(hidden)]
-  fn base_fs_lchown(
+  fn base_fs_symlink_chown(
     &self,
     path: &Path,
     uid: Option<u32>,
@@ -297,19 +297,19 @@ pub trait BaseFsLChown {
   ) -> io::Result<()>;
 }
 
-pub trait FsLChown: BaseFsLChown {
+pub trait FsSymlinkChown: BaseFsSymlinkChown {
   #[inline]
-  fn fs_lchown(
+  fn fs_symlink_chown(
     &self,
     path: impl AsRef<Path>,
     uid: Option<u32>,
     gid: Option<u32>,
   ) -> io::Result<()> {
-    self.base_fs_lchown(path.as_ref(), uid, gid)
+    self.base_fs_symlink_chown(path.as_ref(), uid, gid)
   }
 }
 
-impl<T: BaseFsLChown> FsLChown for T {}
+impl<T: BaseFsSymlinkChown> FsSymlinkChown for T {}
 
 // == FsCopy ==
 

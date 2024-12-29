@@ -522,8 +522,8 @@ impl BaseFsChown for InMemorySys {
   }
 }
 
-impl BaseFsLChown for InMemorySys {
-  fn base_fs_lchown(
+impl BaseFsSymlinkChown for InMemorySys {
+  fn base_fs_symlink_chown(
     &self,
     _path: &Path,
     _uid: Option<u32>,

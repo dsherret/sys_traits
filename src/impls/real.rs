@@ -204,9 +204,9 @@ impl BaseFsChown for RealSys {
 }
 
 #[cfg(unix)]
-impl BaseFsLChown for RealSys {
+impl BaseFsSymlinkChown for RealSys {
   #[inline]
-  fn base_fs_lchown(
+  fn base_fs_symlink_chown(
     &self,
     path: &Path,
     uid: Option<u32>,
@@ -217,9 +217,9 @@ impl BaseFsLChown for RealSys {
 }
 
 #[cfg(not(unix))]
-impl BaseFsLChown for RealSys {
+impl BaseFsSymlinkChown for RealSys {
   #[inline]
-  fn base_fs_lchown(
+  fn base_fs_symlink_chown(
     &self,
     _path: &Path,
     _uid: Option<u32>,
