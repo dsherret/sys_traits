@@ -414,7 +414,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
 
   // sync_all and sync_data
   {
-    let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
+    let mut file = sys.fs_open("copy.txt", &OpenOptions::new_write())?;
     file.fs_file_sync_all()?;
     file.fs_file_sync_data()?;
   }
