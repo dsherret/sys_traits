@@ -936,7 +936,7 @@ impl FsFileLock for WasmFile {
 
   fn fs_file_try_lock(&self, _mode: FsFileLockMode) -> io::Result<()> {
     Err(Error::new(
-      ErrorKind::Other,
+      ErrorKind::Unsupported,
       "try_lock is not supported in Wasm",
     ))
   }

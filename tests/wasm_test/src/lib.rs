@@ -25,6 +25,8 @@ use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
 use sys_traits::FsFileIsTerminal;
+use sys_traits::FsFileLock;
+use sys_traits::FsFileLockMode;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsHardLink;
 use sys_traits::FsMetadata;
@@ -377,6 +379,22 @@ fn run(is_windows: bool) -> std::io::Result<()> {
       let file = sys.fs_open("/dev/stdout", &OpenOptions::new_write())?;
       assert!(file.fs_file_is_terminal());
     }
+  }
+
+  // file lock
+  {
+    let file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
+    file.fs_file_lock(FsFileLockMode::Shared)?;
+    file.fs_file_unlock()?;
+    file.fs_file_lock(FsFileLockMode::Exclusive)?;
+    file.fs_file_unlock()?;
+    assert_eq!(
+      file
+        .fs_file_try_lock(FsFileLockMode::Shared)
+        .unwrap_err()
+        .kind(),
+      ErrorKind::Unsupported
+    );
   }
 
   log("Success!");
