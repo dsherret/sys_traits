@@ -25,7 +25,6 @@ use sys_traits::FsCreateDirAll;
 use sys_traits::FsDirEntry;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsHardLink;
-use sys_traits::FsLChown;
 use sys_traits::FsMetadata;
 use sys_traits::FsMetadataValue;
 use sys_traits::FsOpen;
@@ -36,6 +35,7 @@ use sys_traits::FsRemoveDir;
 use sys_traits::FsRemoveDirAll;
 use sys_traits::FsRemoveFile;
 use sys_traits::FsSetPermissions;
+use sys_traits::FsSymlinkChown;
 use sys_traits::FsSymlinkFile;
 use sys_traits::FsWrite;
 use sys_traits::OpenOptions;
@@ -328,7 +328,10 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     assert!(sys.fs_chown("copy.txt", None, None).is_ok());
   }
   assert_eq!(
-    sys.fs_lchown("copy.txt", None, None).unwrap_err().kind(),
+    sys
+      .fs_symlink_chown("copy.txt", None, None)
+      .unwrap_err()
+      .kind(),
     ErrorKind::Unsupported
   );
 
