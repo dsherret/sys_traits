@@ -16,6 +16,8 @@ use crate::FsFileLockMode;
 use crate::FsFileSetLen;
 use crate::FsFileSetPermissions;
 use crate::FsFileSetTimes;
+use crate::FsFileSyncAll;
+use crate::FsFileSyncData;
 use crate::FsFileTimes;
 use crate::FsMetadataValue;
 use crate::OpenOptions;
@@ -75,15 +77,15 @@ impl FsFileIsTerminal for BoxedFsFile {
 
 impl FsFileLock for BoxedFsFile {
   #[inline]
-  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
     self.0.fs_file_lock(mode)
   }
   #[inline]
-  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_try_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
     self.0.fs_file_try_lock(mode)
   }
   #[inline]
-  fn fs_file_unlock(&self) -> io::Result<()> {
+  fn fs_file_unlock(&mut self) -> io::Result<()> {
     self.0.fs_file_unlock()
   }
 }
@@ -103,8 +105,23 @@ impl FsFileSetPermissions for BoxedFsFile {
 }
 
 impl FsFileSetTimes for BoxedFsFile {
+  #[inline]
   fn fs_file_set_times(&mut self, times: FsFileTimes) -> io::Result<()> {
     self.0.fs_file_set_times(times)
+  }
+}
+
+impl FsFileSyncAll for BoxedFsFile {
+  #[inline]
+  fn fs_file_sync_all(&mut self) -> io::Result<()> {
+    self.0.fs_file_sync_all()
+  }
+}
+
+impl FsFileSyncData for BoxedFsFile {
+  #[inline]
+  fn fs_file_sync_data(&mut self) -> io::Result<()> {
+    self.0.fs_file_sync_data()
   }
 }
 

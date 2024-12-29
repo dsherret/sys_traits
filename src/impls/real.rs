@@ -698,15 +698,15 @@ impl FsFileIsTerminal for RealFsFile {
 }
 
 impl FsFileLock for RealFsFile {
-  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
     lock_file(&self.0, mode, false)
   }
 
-  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+  fn fs_file_try_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
     lock_file(&self.0, mode, true)
   }
 
-  fn fs_file_unlock(&self) -> io::Result<()> {
+  fn fs_file_unlock(&mut self) -> io::Result<()> {
     unlock_file(&self.0)
   }
 }
@@ -863,6 +863,20 @@ impl FsFileSetTimes for RealFsFile {
   }
 }
 
+impl FsFileSyncAll for RealFsFile {
+  #[inline]
+  fn fs_file_sync_all(&mut self) -> io::Result<()> {
+    self.0.sync_all()
+  }
+}
+
+impl FsFileSyncData for RealFsFile {
+  #[inline]
+  fn fs_file_sync_data(&mut self) -> io::Result<()> {
+    self.0.sync_data()
+  }
+}
+
 impl std::io::Seek for RealFsFile {
   #[inline]
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
@@ -976,7 +990,7 @@ mod test {
   #[test]
   fn lock_file() {
     let sys = RealSys;
-    let file = sys.fs_open("Cargo.toml", &OpenOptions::new_read()).unwrap();
+    let mut file = sys.fs_open("Cargo.toml", &OpenOptions::new_read()).unwrap();
     file.fs_file_lock(FsFileLockMode::Shared).unwrap();
     file.fs_file_unlock().unwrap();
     file.fs_file_try_lock(FsFileLockMode::Shared).unwrap();
