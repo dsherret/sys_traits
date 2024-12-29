@@ -1342,6 +1342,19 @@ impl FsFileSetPermissions for InMemoryFile {
   }
 }
 
+impl FsFileSetTimes for InMemoryFile {
+  fn fs_file_set_times(&mut self, times: FsFileTimes) -> std::io::Result<()> {
+    let mut inner = self.inner.write();
+    if let Some(accessed) = times.accessed {
+      inner.accessed = accessed;
+    }
+    if let Some(modified) = times.modified {
+      inner.modified = modified;
+    }
+    Ok(())
+  }
+}
+
 impl std::io::Seek for InMemoryFile {
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
     match pos {

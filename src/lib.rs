@@ -595,6 +595,7 @@ pub trait FsFile:
   + FsFileIsTerminal
   + FsFileLock
   + FsFileSetPermissions
+  + FsFileSetTimes
   + FsFileSetLen
   + FsFileAsRaw
 {
@@ -969,6 +970,32 @@ pub trait FsFileSetLen {
 
 pub trait FsFileSetPermissions {
   fn fs_file_set_permissions(&mut self, mode: u32) -> io::Result<()>;
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FsFileTimes {
+  pub accessed: Option<SystemTime>,
+  pub modified: Option<SystemTime>,
+}
+
+impl FsFileTimes {
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  pub fn accessed(&mut self, accessed: SystemTime) -> &mut Self {
+    self.accessed = Some(accessed);
+    self
+  }
+
+  pub fn modified(&mut self, accessed: SystemTime) -> &mut Self {
+    self.modified = Some(accessed);
+    self
+  }
+}
+
+pub trait FsFileSetTimes {
+  fn fs_file_set_times(&mut self, times: FsFileTimes) -> io::Result<()>;
 }
 
 // #### SYSTEM ####

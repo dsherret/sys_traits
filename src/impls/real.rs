@@ -850,6 +850,19 @@ impl FsFileSetPermissions for RealFsFile {
   }
 }
 
+impl FsFileSetTimes for RealFsFile {
+  fn fs_file_set_times(&mut self, times: FsFileTimes) -> io::Result<()> {
+    let mut std_times = std::fs::FileTimes::new();
+    if let Some(atime) = times.accessed {
+      std_times = std_times.set_accessed(atime);
+    }
+    if let Some(mtime) = times.modified {
+      std_times = std_times.set_modified(mtime);
+    }
+    self.0.set_times(std_times)
+  }
+}
+
 impl std::io::Seek for RealFsFile {
   #[inline]
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
