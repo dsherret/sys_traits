@@ -6,6 +6,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use io::IsTerminal;
+
 use super::strip_unc_prefix;
 use super::RealSys;
 
@@ -432,6 +434,42 @@ impl BaseFsOpen for RealSys {
       #[cfg(all(not(windows), not(unix)))]
       let _ = flags;
     }
+    if let Some(value) = options.access_mode {
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::OpenOptionsExt;
+        builder.access_mode(value);
+      }
+      #[cfg(not(windows))]
+      let _ = value;
+    }
+    if let Some(value) = options.share_mode {
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::OpenOptionsExt;
+        builder.share_mode(value);
+      }
+      #[cfg(not(windows))]
+      let _ = value;
+    }
+    if let Some(value) = options.attributes {
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::OpenOptionsExt;
+        builder.attributes(value);
+      }
+      #[cfg(not(windows))]
+      let _ = value;
+    }
+    if let Some(value) = options.security_qos_flags {
+      #[cfg(windows)]
+      {
+        use std::os::windows::fs::OpenOptionsExt;
+        builder.security_qos_flags(value);
+      }
+      #[cfg(not(windows))]
+      let _ = value;
+    }
     builder
       .read(options.read)
       .write(options.write)
@@ -636,6 +674,158 @@ pub struct RealFsFile(fs::File);
 
 impl FsFile for RealFsFile {}
 
+impl FsFileAsRaw for RealFsFile {
+  #[cfg(windows)]
+  #[inline]
+  fn fs_file_as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+    use std::os::windows::io::AsRawHandle;
+    Some(self.0.as_raw_handle())
+  }
+
+  #[cfg(unix)]
+  #[inline]
+  fn fs_file_as_raw_fd(&self) -> Option<std::os::fd::RawFd> {
+    use std::os::fd::AsRawFd;
+    Some(self.0.as_raw_fd())
+  }
+}
+
+impl FsFileIsTerminal for RealFsFile {
+  #[inline]
+  fn fs_file_is_terminal(&self) -> bool {
+    self.0.is_terminal()
+  }
+}
+
+impl FsFileLock for RealFsFile {
+  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+    lock_file(&self.0, mode, false)
+  }
+
+  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()> {
+    lock_file(&self.0, mode, true)
+  }
+
+  fn fs_file_unlock(&self) -> io::Result<()> {
+    unlock_file(&self.0)
+  }
+}
+
+#[cfg(all(unix, feature = "libc"))]
+fn lock_file(
+  file: &fs::File,
+  mode: FsFileLockMode,
+  try_lock: bool,
+) -> Result<()> {
+  let operation = match mode {
+    FsFileLockMode::Shared => libc::LOCK_SH,
+    FsFileLockMode::Exclusive => libc::LOCK_EX,
+  } | if try_lock { libc::LOCK_NB } else { 0 };
+
+  flock(file, operation)
+}
+
+#[cfg(all(unix, feature = "libc"))]
+#[inline]
+fn unlock_file(file: &fs::File) -> Result<()> {
+  flock(file, libc::LOCK_UN)
+}
+
+#[cfg(all(unix, feature = "libc"))]
+fn flock(file: &fs::File, operation: i32) -> Result<()> {
+  use std::os::unix::io::AsRawFd;
+
+  // SAFETY: libc calls
+  unsafe {
+    let fd = file.as_raw_fd();
+    let result = libc::flock(fd, operation);
+    if result < 0 {
+      Err(Error::last_os_error())
+    } else {
+      Ok(())
+    }
+  }
+}
+
+#[cfg(all(windows, feature = "winapi"))]
+fn lock_file(
+  file: &fs::File,
+  mode: FsFileLockMode,
+  try_lock: bool,
+) -> Result<()> {
+  use std::os::windows::io::AsRawHandle;
+
+  use windows_sys::Win32::Foundation::FALSE;
+  use windows_sys::Win32::Storage::FileSystem::LockFileEx;
+  use windows_sys::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
+  use windows_sys::Win32::Storage::FileSystem::LOCKFILE_FAIL_IMMEDIATELY;
+
+  let flags = match mode {
+    FsFileLockMode::Shared => 0,
+    FsFileLockMode::Exclusive => LOCKFILE_EXCLUSIVE_LOCK,
+  } | if try_lock {
+    LOCKFILE_FAIL_IMMEDIATELY
+  } else {
+    0
+  };
+
+  // SAFETY: winapi calls
+  unsafe {
+    let mut overlapped = std::mem::zeroed();
+    let success =
+      LockFileEx(file.as_raw_handle(), flags, 0, !0, !0, &mut overlapped);
+    if success == FALSE {
+      Err(Error::last_os_error())
+    } else {
+      Ok(())
+    }
+  }
+}
+
+#[cfg(all(windows, feature = "winapi"))]
+fn unlock_file(file: &fs::File) -> Result<()> {
+  use std::os::windows::io::AsRawHandle;
+
+  use windows_sys::Win32::Foundation::FALSE;
+  use windows_sys::Win32::Storage::FileSystem::UnlockFile;
+
+  // SAFETY: winapi calls
+  unsafe {
+    let success = UnlockFile(file.as_raw_handle(), 0, 0, !0, !0);
+    if success == FALSE {
+      Err(Error::last_os_error())
+    } else {
+      Ok(())
+    }
+  }
+}
+
+#[cfg(not(any(
+  all(unix, feature = "libc"),
+  all(windows, feature = "winapi")
+)))]
+fn lock_file(
+  _file: &fs::File,
+  _mode: FsFileLockMode,
+  _try_lock: bool,
+) -> Result<()> {
+  Err(Error::new(
+    ErrorKind::Unsupported,
+    "file locking is not supported on this platform or the libc/winapi feature is not enabled",
+  ))
+}
+
+#[cfg(not(any(
+  all(unix, feature = "libc"),
+  all(windows, feature = "winapi")
+)))]
+fn unlock_file(_file: &fs::File) -> Result<()> {
+  Err(Error::new(
+    ErrorKind::Unsupported,
+    "file locking is not supported on this platform or the libc/winapi feature is not enabled",
+  ))
+}
+
 impl FsFileSetLen for RealFsFile {
   #[inline]
   fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
@@ -767,5 +957,20 @@ mod test {
   #[test]
   fn test_general() {
     assert!(RealSys.sys_time_now().elapsed().is_ok());
+  }
+
+  #[cfg(any(feature = "winapi", feature = "libc"))]
+  #[test]
+  fn lock_file() {
+    let sys = RealSys;
+    let file = sys.fs_open("Cargo.toml", &OpenOptions::new_read()).unwrap();
+    file.fs_file_lock(FsFileLockMode::Shared).unwrap();
+    file.fs_file_unlock().unwrap();
+    file.fs_file_try_lock(FsFileLockMode::Shared).unwrap();
+    file.fs_file_unlock().unwrap();
+    file.fs_file_lock(FsFileLockMode::Exclusive).unwrap();
+    file.fs_file_unlock().unwrap();
+    file.fs_file_try_lock(FsFileLockMode::Exclusive).unwrap();
+    file.fs_file_unlock().unwrap();
   }
 }

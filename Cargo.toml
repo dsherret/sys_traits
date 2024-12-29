@@ -40,7 +40,7 @@ getrandom = { version = "0.2", optional = true }
 libc = { version = "0.2", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.59", optional = true, features = ["Win32_Globalization", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
+windows-sys = { version = "0.59", optional = true, features = ["Win32_Globalization", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = { version = "0.3", optional = true }

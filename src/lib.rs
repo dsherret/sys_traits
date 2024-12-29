@@ -148,6 +148,14 @@ pub struct OpenOptions {
   ///
   /// Note: only provide flags that make sense for the current operating system.
   pub custom_flags: Option<CustomFlagsValue>,
+  /// Windows only. Ignored on Unix.
+  pub access_mode: Option<u32>,
+  /// Windows only. Ignored on Unix.
+  pub share_mode: Option<u32>,
+  /// Windows only. Ignored on Unix.
+  pub attributes: Option<u32>,
+  /// Windows only. Ignored on Unix.
+  pub security_qos_flags: Option<u32>,
 }
 
 impl OpenOptions {
@@ -163,8 +171,7 @@ impl OpenOptions {
       truncate: false,
       append: false,
       create_new: false,
-      mode: None,
-      custom_flags: None,
+      ..Default::default()
     }
   }
 
@@ -182,8 +189,7 @@ impl OpenOptions {
       truncate: true,
       append: false,
       create_new: false,
-      mode: None,
-      custom_flags: None,
+      ..Default::default()
     }
   }
 
@@ -195,8 +201,7 @@ impl OpenOptions {
       truncate: false,
       append: true,
       create_new: false,
-      mode: None,
-      custom_flags: None,
+      ..Default::default()
     }
   }
 
@@ -239,6 +244,30 @@ impl OpenOptions {
   #[inline]
   pub fn custom_flags(&mut self, flags: CustomFlagsValue) -> &mut Self {
     self.custom_flags = Some(flags);
+    self
+  }
+
+  #[inline]
+  pub fn access_mode(&mut self, value: u32) -> &mut Self {
+    self.access_mode = Some(value);
+    self
+  }
+
+  #[inline]
+  pub fn share_mode(&mut self, value: u32) -> &mut Self {
+    self.share_mode = Some(value);
+    self
+  }
+
+  #[inline]
+  pub fn attributes(&mut self, value: u32) -> &mut Self {
+    self.attributes = Some(value);
+    self
+  }
+
+  #[inline]
+  pub fn security_qos_flags(&mut self, value: u32) -> &mut Self {
+    self.security_qos_flags = Some(value);
     self
   }
 }
@@ -563,8 +592,11 @@ pub trait FsFile:
   std::io::Read
   + std::io::Write
   + std::io::Seek
+  + FsFileIsTerminal
+  + FsFileLock
   + FsFileSetPermissions
   + FsFileSetLen
+  + FsFileAsRaw
 {
 }
 
@@ -903,6 +935,33 @@ pub trait FsWrite: BaseFsWrite {
 impl<T: BaseFsWrite> FsWrite for T {}
 
 // #### FILE SYSTEM FILE ####
+
+pub trait FsFileAsRaw {
+  /// Returns the raw handle for a file on Windows platforms only
+  /// or `None` when the file doesn't support it (ex. in-memory file system).
+  #[cfg(windows)]
+  fn fs_file_as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle>;
+
+  /// Returns the raw file descriptor on Unix platforms only
+  /// or `None` when the file doesn't support it (ex. in-memory file system).
+  #[cfg(unix)]
+  fn fs_file_as_raw_fd(&self) -> Option<std::os::fd::RawFd>;
+}
+
+pub trait FsFileIsTerminal {
+  fn fs_file_is_terminal(&self) -> bool;
+}
+
+pub enum FsFileLockMode {
+  Shared,
+  Exclusive,
+}
+
+pub trait FsFileLock {
+  fn fs_file_lock(&self, mode: FsFileLockMode) -> io::Result<()>;
+  fn fs_file_try_lock(&self, mode: FsFileLockMode) -> io::Result<()>;
+  fn fs_file_unlock(&self) -> io::Result<()>;
+}
 
 pub trait FsFileSetLen {
   fn fs_file_set_len(&mut self, size: u64) -> io::Result<()>;
