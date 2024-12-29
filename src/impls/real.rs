@@ -990,7 +990,7 @@ mod test {
   #[test]
   fn lock_file() {
     let sys = RealSys;
-    let file = sys.fs_open("Cargo.toml", &OpenOptions::new_read()).unwrap();
+    let mut file = sys.fs_open("Cargo.toml", &OpenOptions::new_read()).unwrap();
     file.fs_file_lock(FsFileLockMode::Shared).unwrap();
     file.fs_file_unlock().unwrap();
     file.fs_file_try_lock(FsFileLockMode::Shared).unwrap();

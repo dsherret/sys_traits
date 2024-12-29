@@ -398,7 +398,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
 
   // file lock
   {
-    let file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
+    let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
     file.fs_file_lock(FsFileLockMode::Shared)?;
     file.fs_file_unlock()?;
     file.fs_file_lock(FsFileLockMode::Exclusive)?;
