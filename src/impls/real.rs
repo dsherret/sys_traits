@@ -400,6 +400,43 @@ impl BaseFsMetadata for RealSys {
   fn base_fs_symlink_metadata(&self, path: &Path) -> Result<Self::Metadata> {
     fs::symlink_metadata(path).map(RealFsMetadata)
   }
+
+  #[cfg(any(all(unix, feature = "libc"), all(windows, feature = "winapi")))]
+  #[inline]
+  fn base_fs_exists_no_err(&self, path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+      use libc::access;
+      use libc::F_OK;
+      use std::os::unix::ffi::OsStrExt;
+
+      let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes())
+      else {
+        return false;
+      };
+
+      // Safety: `access` is a system call and we ensure `c_path` is a valid C string.
+      unsafe { access(c_path.as_ptr(), F_OK) == 0 }
+    }
+
+    #[cfg(windows)]
+    {
+      use std::os::windows::ffi::OsStrExt;
+      use windows_sys::Win32::Storage::FileSystem::GetFileAttributesW;
+      use windows_sys::Win32::Storage::FileSystem::INVALID_FILE_ATTRIBUTES;
+
+      let wide_path: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+      // Safety: `GetFileAttributesW` is a Windows API call, and `wide_path` is null-terminated.
+      unsafe {
+        GetFileAttributesW(wide_path.as_ptr()) != INVALID_FILE_ATTRIBUTES
+      }
+    }
+  }
 }
 
 impl BaseFsOpen for RealSys {
@@ -999,5 +1036,11 @@ mod test {
     file.fs_file_unlock().unwrap();
     file.fs_file_try_lock(FsFileLockMode::Exclusive).unwrap();
     file.fs_file_unlock().unwrap();
+  }
+
+  #[test]
+  fn test_exists_no_err() {
+    assert!(RealSys.fs_exists_no_err("Cargo.toml"));
+    assert!(!RealSys.fs_exists_no_err("Cargo2.toml"));
   }
 }

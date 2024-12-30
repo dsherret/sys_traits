@@ -524,6 +524,25 @@ pub trait BaseFsMetadata {
   #[doc(hidden)]
   fn base_fs_symlink_metadata(&self, path: &Path)
     -> io::Result<Self::Metadata>;
+
+  #[doc(hidden)]
+  fn base_fs_exists(&self, path: &Path) -> io::Result<bool> {
+    match self.base_fs_symlink_metadata(path) {
+      Ok(_) => Ok(true),
+      Err(err) => {
+        if err.kind() == ErrorKind::NotFound {
+          Ok(false)
+        } else {
+          Err(err)
+        }
+      }
+    }
+  }
+
+  #[doc(hidden)]
+  fn base_fs_exists_no_err(&self, path: &Path) -> bool {
+    self.base_fs_exists(path).unwrap_or(false)
+  }
 }
 
 /// These two functions are so cloesly related that it becomes verbose to
@@ -542,43 +561,42 @@ pub trait FsMetadata: BaseFsMetadata {
     self.base_fs_symlink_metadata(path.as_ref())
   }
 
+  #[inline]
   fn fs_is_file(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::File)
   }
 
+  #[inline]
   fn fs_is_file_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_file(path).unwrap_or(false)
   }
 
+  #[inline]
   fn fs_is_dir(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_metadata(path)?.file_type() == FileType::Dir)
   }
 
+  #[inline]
   fn fs_is_dir_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_dir(path).unwrap_or(false)
   }
 
+  #[inline]
   fn fs_exists(&self, path: impl AsRef<Path>) -> io::Result<bool> {
-    match self.fs_symlink_metadata(path) {
-      Ok(_) => Ok(true),
-      Err(err) => {
-        if err.kind() == ErrorKind::NotFound {
-          Ok(false)
-        } else {
-          Err(err)
-        }
-      }
-    }
+    self.base_fs_exists(path.as_ref())
   }
 
+  #[inline]
   fn fs_exists_no_err(&self, path: impl AsRef<Path>) -> bool {
-    self.fs_exists(path).unwrap_or(false)
+    self.base_fs_exists_no_err(path.as_ref())
   }
 
+  #[inline]
   fn fs_is_symlink(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_symlink_metadata(path)?.file_type() == FileType::Symlink)
   }
 
+  #[inline]
   fn fs_is_symlink_no_err(&self, path: impl AsRef<Path>) -> bool {
     self.fs_is_symlink(path).unwrap_or(false)
   }
