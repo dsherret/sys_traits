@@ -234,7 +234,7 @@ impl BaseFsSymlinkChown for RealSys {
   }
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
 impl BaseFsCloneFile for RealSys {
   #[inline]
   fn base_fs_clone_file(&self, from: &Path, to: &Path) -> std::io::Result<()> {
@@ -250,7 +250,7 @@ impl BaseFsCloneFile for RealSys {
   }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "macos"))]
 impl BaseFsCloneFile for RealSys {
   fn base_fs_clone_file(&self, _from: &Path, _to: &Path) -> io::Result<()> {
     Err(std::io::Error::new(
@@ -1077,7 +1077,7 @@ mod test {
     RealSys.fs_write(path.join("file.txt"), "data").unwrap();
     let result =
       RealSys.fs_clone_file(path.join("file.txt"), path.join("cloned.txt"));
-    if cfg!(unix) {
+    if cfg!(target_os = "macos") {
       assert!(result.is_ok());
       assert_eq!(
         RealSys.fs_read_to_string(path.join("cloned.txt")).unwrap(),
