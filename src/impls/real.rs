@@ -238,6 +238,7 @@ impl BaseFsSymlinkChown for RealSys {
 impl BaseFsCloneFile for RealSys {
   #[inline]
   fn base_fs_clone_file(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
     let from = std::ffi::CString::new(from.as_os_str().as_bytes())?;
     let to = std::ffi::CString::new(to.as_os_str().as_bytes())?;
     // SAFETY: `from` and `to` are valid C strings.
