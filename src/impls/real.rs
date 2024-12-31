@@ -234,6 +234,31 @@ impl BaseFsSymlinkChown for RealSys {
   }
 }
 
+#[cfg(unix)]
+impl BaseFsCloneFile for RealSys {
+  #[inline]
+  fn base_fs_clone_file(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+    let from = std::ffi::CString::new(from.as_os_str().as_bytes())?;
+    let to = std::ffi::CString::new(to.as_os_str().as_bytes())?;
+    // SAFETY: `from` and `to` are valid C strings.
+    let ret = unsafe { libc::clonefile(from.as_ptr(), to.as_ptr(), 0) };
+    if ret != 0 {
+      return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+  }
+}
+
+#[cfg(not(unix))]
+impl BaseFsCloneFile for RealSys {
+  fn base_fs_clone_file(&self, _from: &Path, _to: &Path) -> io::Result<()> {
+    Err(std::io::Error::new(
+      ErrorKind::Unsupported,
+      "clonefile is not supported on this platform",
+    ))
+  }
+}
+
 impl BaseFsCopy for RealSys {
   #[inline]
   fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
@@ -1042,5 +1067,19 @@ mod test {
   fn test_exists_no_err() {
     assert!(RealSys.fs_exists_no_err("Cargo.toml"));
     assert!(!RealSys.fs_exists_no_err("Cargo2.toml"));
+  }
+
+  #[test]
+  fn test_clone_file() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path();
+    let result = RealSys.fs_write("file.txt", "data");
+    let result = RealSys.fs_clone_file("file.txt", "cloned.txt");
+    if cfg!(unix) {
+      assert!(result.is_ok());
+      assert_eq!(RealSys.fs_read("cloned.txt").unwrap(), "data");
+    } else {
+      assert_eq!(result.unwrap_err().kind(), ErrorKind::Unsupported);
+    }
   }
 }
