@@ -234,7 +234,7 @@ impl BaseFsSymlinkChown for RealSys {
   }
 }
 
-#[cfg(target_vendor = "apple")]
+#[cfg(all(target_vendor = "apple", feature = "libc"))]
 impl BaseFsCloneFile for RealSys {
   #[inline]
   fn base_fs_clone_file(&self, from: &Path, to: &Path) -> std::io::Result<()> {
@@ -250,12 +250,12 @@ impl BaseFsCloneFile for RealSys {
   }
 }
 
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(not(all(target_vendor = "apple", feature = "libc")))]
 impl BaseFsCloneFile for RealSys {
   fn base_fs_clone_file(&self, _from: &Path, _to: &Path) -> io::Result<()> {
     Err(std::io::Error::new(
       ErrorKind::Unsupported,
-      "clonefile is not supported on this platform",
+      "clonefile is not supported on this platform or the libc feature in sys_traits is not enabled",
     ))
   }
 }
