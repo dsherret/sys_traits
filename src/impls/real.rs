@@ -1073,11 +1073,15 @@ mod test {
   fn test_clone_file() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path();
-    let result = RealSys.fs_write("file.txt", "data");
-    let result = RealSys.fs_clone_file("file.txt", "cloned.txt");
+    RealSys.fs_write(path.join("file.txt"), "data").unwrap();
+    let result =
+      RealSys.fs_clone_file(path.join("file.txt"), path.join("cloned.txt"));
     if cfg!(unix) {
       assert!(result.is_ok());
-      assert_eq!(RealSys.fs_read("cloned.txt").unwrap(), "data");
+      assert_eq!(
+        RealSys.fs_read_to_string(path.join("cloned.txt")).unwrap(),
+        "data"
+      );
     } else {
       assert_eq!(result.unwrap_err().kind(), ErrorKind::Unsupported);
     }
