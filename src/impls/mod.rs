@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
 #[cfg(feature = "real")]
-#[derive(Debug, Default, Clone, Copy)]
+// do not implement Copy so that swapping out the RealSys
+// with another implementation that requires Clone based
+// on compliation settings will not give a clippy error
+#[derive(Debug, Default, Clone)]
 pub struct RealSys;
 
 #[cfg(feature = "memory")]

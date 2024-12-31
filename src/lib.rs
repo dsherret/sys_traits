@@ -129,7 +129,7 @@ type CustomFlagsValue = u32;
 #[cfg(not(windows))]
 type CustomFlagsValue = i32;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default, rename_all = "camelCase"))]
 #[non_exhaustive] // so we can add properties without breaking people
