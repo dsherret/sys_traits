@@ -340,6 +340,26 @@ pub trait FsSymlinkChown: BaseFsSymlinkChown {
 
 impl<T: BaseFsSymlinkChown> FsSymlinkChown for T {}
 
+// == FsCloneFile ==
+
+pub trait BaseFsCloneFile {
+  #[doc(hidden)]
+  fn base_fs_clone_file(&self, from: &Path, to: &Path) -> io::Result<()>;
+}
+
+pub trait FsCloneFile: BaseFsCloneFile {
+  #[inline]
+  fn fs_clone_file(
+    &self,
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+  ) -> io::Result<()> {
+    self.base_fs_clone_file(from.as_ref(), to.as_ref())
+  }
+}
+
+impl<T: BaseFsCloneFile> FsCloneFile for T {}
+
 // == FsCopy ==
 
 pub trait BaseFsCopy {

@@ -560,6 +560,21 @@ impl BaseFsSymlinkChown for InMemorySys {
   }
 }
 
+impl BaseFsCopy for InMemorySys {
+  fn base_fs_copy(&self, from: &Path, to: &Path) -> Result<u64> {
+    let data = self.fs_read(from)?;
+    let len = data.len();
+    self.fs_write(to, data)?;
+    Ok(len as u64)
+  }
+}
+
+impl BaseFsCloneFile for InMemorySys {
+  fn base_fs_clone_file(&self, from: &Path, to: &Path) -> Result<()> {
+    self.base_fs_copy(from, to).map(|_| ())
+  }
+}
+
 impl BaseFsCreateDir for InMemorySys {
   fn base_fs_create_dir(
     &self,

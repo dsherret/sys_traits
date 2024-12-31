@@ -20,6 +20,7 @@ use sys_traits::EnvVar;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsChown;
+use sys_traits::FsCloneFile;
 use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
@@ -418,6 +419,14 @@ fn run(is_windows: bool) -> std::io::Result<()> {
     file.fs_file_sync_all()?;
     file.fs_file_sync_data()?;
   }
+
+  assert_eq!(
+    sys
+      .fs_clone_file("test.txt", "other.txt")
+      .unwrap_err()
+      .kind(),
+    ErrorKind::Unsupported
+  );
 
   log("Success!");
 
