@@ -561,7 +561,7 @@ impl BaseFsReadDir for RealSys {
     &self,
     path: &Path,
   ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>> + '_>,
   > {
     let iterator = fs::read_dir(path)?;
     Ok(Box::new(iterator.map(|result| result.map(RealFsDirEntry))))
