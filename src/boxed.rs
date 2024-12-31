@@ -4,6 +4,7 @@ use std::io;
 use std::path::Path;
 use std::time::SystemTime;
 
+use crate::BaseFsMetadata;
 use crate::BaseFsOpen;
 use crate::BaseFsReadDir;
 use crate::FileType;
@@ -147,10 +148,16 @@ impl<TFile: FsFile + 'static, T: BaseFsOpen<File = TFile>> FsOpenBoxed for T {
   }
 }
 
-// == FsReadDirBoxed ==
+// == FsMetadataBoxed ==
 
 #[derive(Debug)]
 pub struct BoxedFsMetadataValue(pub Box<dyn FsMetadataValue>);
+
+impl BoxedFsMetadataValue {
+  pub fn new<T: FsMetadataValue + 'static>(metadata: T) -> Self {
+    Self(Box::new(metadata))
+  }
+}
 
 impl FsMetadataValue for BoxedFsMetadataValue {
   #[inline]
@@ -254,6 +261,31 @@ impl FsMetadataValue for BoxedFsMetadataValue {
   }
 }
 
+pub trait FsMetadataBoxed {
+  fn fs_metadata_boxed(&self, path: &Path) -> io::Result<BoxedFsMetadataValue>;
+  fn fs_symlink_metadata_boxed(
+    &self,
+    path: &Path,
+  ) -> io::Result<BoxedFsMetadataValue>;
+}
+
+impl<T: BaseFsMetadata + 'static> FsMetadataBoxed for T {
+  fn fs_metadata_boxed(&self, path: &Path) -> io::Result<BoxedFsMetadataValue> {
+    let metadata = self.base_fs_metadata(path)?;
+    Ok(BoxedFsMetadataValue(Box::new(metadata)))
+  }
+
+  fn fs_symlink_metadata_boxed(
+    &self,
+    path: &Path,
+  ) -> io::Result<BoxedFsMetadataValue> {
+    let metadata = self.base_fs_symlink_metadata(path)?;
+    Ok(BoxedFsMetadataValue(Box::new(metadata)))
+  }
+}
+
+// == FsReadDirBoxed ==
+
 #[derive(Debug)]
 struct MappedMetadataFsDirEntry<T: FsDirEntry + 'static>(T);
 
@@ -286,7 +318,7 @@ impl<T: FsDirEntry + 'static> FsDirEntry for MappedMetadataFsDirEntry<T> {
 
 #[derive(Debug)]
 pub struct BoxedFsDirEntry(
-  Box<dyn FsDirEntry<Metadata = BoxedFsMetadataValue>>,
+  pub Box<dyn FsDirEntry<Metadata = BoxedFsMetadataValue>>,
 );
 
 impl BoxedFsDirEntry {
@@ -323,14 +355,15 @@ pub trait FsReadDirBoxed {
   fn fs_read_dir_boxed(
     &self,
     path: &Path,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>>>>;
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>> + '_>>;
 }
 
 impl<T: BaseFsReadDir> FsReadDirBoxed for T {
   fn fs_read_dir_boxed(
     &self,
     path: &Path,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>>>> {
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>> + '_>>
+  {
     let iter = self.base_fs_read_dir(path)?;
     Ok(Box::new(
       iter.map(|result| result.map(BoxedFsDirEntry::new)),
