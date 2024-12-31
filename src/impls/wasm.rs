@@ -317,7 +317,11 @@ impl BaseFsCopy for RealSys {
 
 impl BaseFsCloneFile for RealSys {
   #[inline]
-  fn base_fs_clone_file(&self, from: &Path, to: &Path) -> std::io::Result<()> {
+  fn base_fs_clone_file(
+    &self,
+    _from: &Path,
+    _to: &Path,
+  ) -> std::io::Result<()> {
     Err(Error::new(
       ErrorKind::Unsupported,
       "fs_clone_file is not supported in Wasm",
