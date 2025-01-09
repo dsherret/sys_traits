@@ -20,16 +20,31 @@ pub use in_memory::InMemoryFile;
 pub use in_memory::InMemorySys;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub use wasm::WasmFile;
-
-#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
-pub type RealFsFile = WasmFile;
+pub type RealFsFile = wasm::WasmFile;
 #[cfg(all(
   feature = "real",
   not(target_arch = "wasm32"),
   not(feature = "wasm")
 ))]
 pub type RealFsFile = real::RealFsFile;
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub type RealFsMetadata = wasm::WasmMetadata;
+#[cfg(all(
+  feature = "real",
+  not(target_arch = "wasm32"),
+  not(feature = "wasm")
+))]
+pub type RealFsMetadata = real::RealFsMetadata;
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub type RealFsDirEntry = wasm::WasmFsDirEntry;
+#[cfg(all(
+  feature = "real",
+  not(target_arch = "wasm32"),
+  not(feature = "wasm")
+))]
+pub type RealFsDirEntry = real::RealFsDirEntry;
 
 /// Helper that converts a string to a path for Wasm.
 ///
