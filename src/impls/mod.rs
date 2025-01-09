@@ -31,6 +31,24 @@ pub type RealFsFile = WasmFile;
 ))]
 pub type RealFsFile = real::RealFsFile;
 
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub type RealFsMetadata = WasmMetadata;
+#[cfg(all(
+  feature = "real",
+  not(target_arch = "wasm32"),
+  not(feature = "wasm")
+))]
+pub type RealFsMetadata = real::RealFsMetadata;
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub type RealFsDirEntry = WasmFsDirEntry;
+#[cfg(all(
+  feature = "real",
+  not(target_arch = "wasm32"),
+  not(feature = "wasm")
+))]
+pub type RealFsDirEntry = real::RealFsDirEntry;
+
 /// Helper that converts a string to a path for Wasm.
 ///
 /// This will handle converting Windows-style paths received from JS
