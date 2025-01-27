@@ -689,7 +689,8 @@ impl BaseFsMetadata for InMemorySys {
 
   fn base_fs_metadata(&self, path: &Path) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
-    let (_, entry) = inner.lookup_entry(path)?;
+    let path = inner.to_absolute_path(path);
+    let (_, entry) = inner.lookup_entry(&path)?;
     Ok(InMemoryMetadata {
       file_type: entry.file_type(),
       len: entry.len(),
@@ -705,7 +706,8 @@ impl BaseFsMetadata for InMemorySys {
     path: &Path,
   ) -> std::io::Result<InMemoryMetadata> {
     let inner = self.0.read();
-    let detail = inner.lookup_entry_detail_no_follow(path)?;
+    let path = inner.to_absolute_path(path);
+    let detail = inner.lookup_entry_detail_no_follow(&path)?;
     match detail {
       LookupNoFollowEntry::NotFound(path) => Err(Error::new(
         ErrorKind::NotFound,
@@ -1872,6 +1874,13 @@ mod tests {
       .collect();
 
     assert!(entries.is_empty());
+  }
+
+  #[test]
+  fn test_fs_exists() {
+    let sys = InMemorySys::default();
+    sys.fs_insert("hello.txt", "hello\n");
+    assert!(sys.fs_exists("hello.txt").unwrap());
   }
 
   #[test]
