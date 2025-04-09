@@ -7,9 +7,15 @@ use std::path::PathBuf;
 #[derive(Debug, Default, Clone)]
 pub struct RealSys;
 
-#[cfg(feature = "real")]
+#[cfg(any(
+  all(feature = "real", target_os = "windows", feature = "winapi"),
+  all(feature = "real", unix, feature = "libc")
+))]
 pub use real::real_cache_dir_with_env;
-#[cfg(feature = "real")]
+#[cfg(any(
+  all(feature = "real", target_os = "windows", feature = "winapi"),
+  all(feature = "real", unix, feature = "libc")
+))]
 pub use real::real_home_dir_with_env;
 
 #[cfg(feature = "memory")]
