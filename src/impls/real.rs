@@ -116,6 +116,7 @@ pub fn real_cache_dir_with_env(
 ) -> Option<PathBuf> {
   #[cfg(all(target_os = "windows", feature = "winapi"))]
   {
+    let _ = env;
     known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
   }
   #[cfg(all(unix, feature = "libc"))]
