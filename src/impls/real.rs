@@ -94,30 +94,64 @@ impl EnvSetUmask for RealSys {
   }
 }
 
-#[cfg(all(unix, feature = "libc"))]
+#[cfg(any(
+  all(target_os = "windows", feature = "winapi"),
+  all(unix, feature = "libc")
+))]
 impl EnvCacheDir for RealSys {
+  #[inline]
   fn env_cache_dir(&self) -> Option<PathBuf> {
+    real_cache_dir_with_env(self)
+  }
+}
+
+#[cfg(any(
+  all(target_os = "windows", feature = "winapi"),
+  all(unix, feature = "libc")
+))]
+pub fn real_cache_dir_with_env(
+  env: &(impl EnvVar + EnvHomeDir),
+) -> Option<PathBuf> {
+  #[cfg(all(target_os = "windows", feature = "winapi"))]
+  {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
+  }
+  #[cfg(all(unix, feature = "libc"))]
+  {
     if cfg!(target_os = "macos") {
-      self.env_home_dir().map(|h| h.join("Library/Caches"))
+      env.env_home_dir().map(|h| h.join("Library/Caches"))
     } else {
-      self
+      env
         .env_var_path("XDG_CACHE_HOME")
-        .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
+        .or_else(|| env.env_home_dir().map(|home| home.join(".cache")))
     }
   }
 }
 
-#[cfg(all(target_os = "windows", feature = "winapi"))]
-impl EnvCacheDir for RealSys {
-  #[inline]
-  fn env_cache_dir(&self) -> Option<PathBuf> {
-    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_LocalAppData)
+#[cfg(any(
+  all(target_os = "windows", feature = "winapi"),
+  all(unix, feature = "libc")
+))]
+impl EnvHomeDir for RealSys {
+  fn env_home_dir(&self) -> Option<PathBuf> {
+    real_home_dir_with_env(self)
   }
 }
 
 #[cfg(all(unix, feature = "libc"))]
-impl EnvHomeDir for RealSys {
-  fn env_home_dir(&self) -> Option<PathBuf> {
+#[cfg(any(
+  all(target_os = "windows", feature = "winapi"),
+  all(unix, feature = "libc")
+))]
+pub fn real_home_dir_with_env(env: &impl EnvVar) -> Option<PathBuf> {
+  #[cfg(all(target_os = "windows", feature = "winapi"))]
+  {
+    env.env_var_path("USERPROFILE").or_else(|| {
+      known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
+    })
+  }
+  #[cfg(all(unix, feature = "libc"))]
+  {
     // This piece of code was taken from the deprecated home_dir() function in Rust's standard library
     unsafe fn fallback() -> Option<std::ffi::OsString> {
       let amt = match libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) {
@@ -143,19 +177,9 @@ impl EnvHomeDir for RealSys {
       }
     }
 
-    self.env_var_path("HOME").or_else(|| {
+    env.env_var_path("HOME").or_else(|| {
       // SAFETY: libc
       unsafe { fallback().map(PathBuf::from) }
-    })
-  }
-}
-
-#[cfg(all(target_os = "windows", feature = "winapi"))]
-impl EnvHomeDir for RealSys {
-  #[inline]
-  fn env_home_dir(&self) -> Option<PathBuf> {
-    self.env_var_path("USERPROFILE").or_else(|| {
-      known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Profile)
     })
   }
 }
