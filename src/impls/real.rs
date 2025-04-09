@@ -142,7 +142,6 @@ impl EnvHomeDir for RealSys {
 
 /// Uses the provided env for environment variables, but falls
 /// back to real sys calls.
-#[cfg(all(unix, feature = "libc"))]
 #[cfg(any(
   all(target_os = "windows", feature = "winapi"),
   all(unix, feature = "libc")
