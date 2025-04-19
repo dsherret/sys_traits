@@ -14,6 +14,7 @@ use crate::FsFileAsRaw;
 use crate::FsFileIsTerminal;
 use crate::FsFileLock;
 use crate::FsFileLockMode;
+use crate::FsFileMetadata;
 use crate::FsFileSetLen;
 use crate::FsFileSetPermissions;
 use crate::FsFileSetTimes;
@@ -25,7 +26,9 @@ use crate::OpenOptions;
 
 // == FsOpenBoxed ==
 
-pub struct BoxedFsFile(pub Box<dyn FsFile + 'static>);
+pub struct BoxedFsFile(
+  pub Box<dyn FsFile<Metadata = dyn FsMetadataValue + 'static> + 'static>,
+);
 
 impl io::Read for BoxedFsFile {
   #[inline]
@@ -73,6 +76,18 @@ impl FsFileIsTerminal for BoxedFsFile {
   #[inline]
   fn fs_file_is_terminal(&self) -> bool {
     self.0.fs_file_is_terminal()
+  }
+}
+
+impl FsFileMetadata for BoxedFsFile {
+  type Metadata = BoxedFsMetadataValue;
+
+  #[inline]
+  fn fs_file_metadata(&self) -> io::Result<Self::Metadata> {
+    self
+      .0
+      .fs_file_metadata()
+      .map(|metadata| BoxedFsMetadataValue(Box::new(metadata)))
   }
 }
 
@@ -136,7 +151,12 @@ pub trait FsOpenBoxed {
   ) -> io::Result<BoxedFsFile>;
 }
 
-impl<TFile: FsFile + 'static, T: BaseFsOpen<File = TFile>> FsOpenBoxed for T {
+impl<
+    TMetadata: FsMetadataValue + 'static,
+    TFile: FsFile<Metadata = TMetadata> + 'static,
+    T: BaseFsOpen<File = TFile>,
+  > FsOpenBoxed for T
+{
   fn fs_open_boxed(
     &self,
     path: &Path,

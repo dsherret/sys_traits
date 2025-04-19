@@ -917,6 +917,15 @@ fn unlock_file(_file: &fs::File) -> Result<()> {
   ))
 }
 
+impl FsFileMetadata for RealFsFile {
+  type Metadata = RealFsMetadata;
+
+  #[inline]
+  fn fs_file_metadata(&self) -> io::Result<Self::Metadata> {
+    self.0.metadata().map(RealFsMetadata)
+  }
+}
+
 impl FsFileSetLen for RealFsFile {
   #[inline]
   fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
