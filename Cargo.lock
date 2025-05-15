@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "sys_traits"
-version = "0.1.9"
+version = "0.1.10"
 dependencies = [
  "filetime",
  "getrandom",
@@ -276,9 +276,19 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "sys_traits_macros",
  "tempfile",
  "wasm-bindgen",
  "windows-sys",
+]
+
+[[package]]
+name = "sys_traits_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
