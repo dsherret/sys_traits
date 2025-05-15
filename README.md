@@ -20,6 +20,24 @@ pub fn write_random_data<TSys: FsWriteFile + SystemRandom>(
 
 Now a caller only needs to provide a type that implements those two functions.
 
+## `#[sys_traits::auto_impl]`
+
+Use the `#[sys_traits::auto_impl]` macro to reduce boilerplate when wanting to
+automatically implement a trait for `T` when `T` implements the required traits.
+
+This is useful for aliasing and reducing verbosity when using this crate.
+
+```diff
++#[sys_traits::auto_impl]
+pub trait WriteRandomDataSys: FsWriteFile + SystemRandom
+{
+}
+
+-impl<T> DenoResolverSys for T where T: FsWriteFile + SystemRandom
+-{
+-}
+```
+
 ## Implementations
 
 Comes with two implementations that implement all the traits.
@@ -69,23 +87,3 @@ There's two reasons for this:
 1. You can't box traits with `impl ...`.
 2. By design it limits code generation of multiple kinds of `impl AsRef<Path>`
    and `impl AsRef<[u8]>` to only being a single statement.
-
-## `#[sys_traits::auto_impl]`
-
-Use the `#[sys_traits::auto_impl]` macro to reduce boilerplate when wanting to
-automatically implement a trait for `T` when `T` implements the required traits.
-
-This is useful for aliasing and reducing verbosity when using this crate.
-
-```diff
-+#[sys_traits::auto_impl]
-pub trait DenoResolverSys:
-  FsCanonicalize + FsMetadata + FsRead + FsReadDir + std::fmt::Debug
-{
-}
-
--impl<T> DenoResolverSys for T where
--  T: FsCanonicalize + FsMetadata + FsRead + FsReadDir + std::fmt::Debug
--{
--}
-```
