@@ -13,6 +13,8 @@ use std::time::SystemTime;
 pub mod boxed;
 pub mod impls;
 
+pub use sys_traits_macros::auto_impl;
+
 // #### ENVIRONMENT ####
 
 // == EnvCurrentDir ==
