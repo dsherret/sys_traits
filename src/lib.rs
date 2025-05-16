@@ -634,6 +634,7 @@ pub trait FsFile:
   + std::io::Seek
   + FsFileIsTerminal
   + FsFileLock
+  + FsFileMetadata
   + FsFileSetPermissions
   + FsFileSetTimes
   + FsFileSetLen
@@ -994,6 +995,13 @@ pub trait FsFileAsRaw {
 
 pub trait FsFileIsTerminal {
   fn fs_file_is_terminal(&self) -> bool;
+}
+
+pub trait FsFileMetadata {
+  type Metadata: FsMetadataValue;
+
+  #[doc(hidden)]
+  fn fs_file_metadata(&self) -> io::Result<Self::Metadata>;
 }
 
 pub enum FsFileLockMode {

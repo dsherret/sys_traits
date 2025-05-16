@@ -16,6 +16,7 @@ use crate::*;
 pub struct InMemoryFile {
   sys: InMemorySys,
   inner: Arc<RwLock<FileInner>>,
+  path: PathBuf,
   pos: usize,
 }
 
@@ -789,6 +790,7 @@ impl BaseFsOpen for InMemorySys {
           Ok(InMemoryFile {
             sys: self.clone(),
             inner: f.inner.clone(),
+            path,
             pos: if options.append {
               f.inner.read().data.len()
             } else {
@@ -816,6 +818,7 @@ impl BaseFsOpen for InMemorySys {
         let result = InMemoryFile {
           sys: self.clone(),
           inner: new_file.inner.clone(),
+          path,
           pos: if options.append {
             new_file.inner.read().data.len()
           } else {
@@ -1340,6 +1343,14 @@ impl FsFileIsTerminal for InMemoryFile {
   #[inline]
   fn fs_file_is_terminal(&self) -> bool {
     false
+  }
+}
+
+impl FsFileMetadata for InMemoryFile {
+  type Metadata = InMemoryMetadata;
+
+  fn fs_file_metadata(&self) -> std::io::Result<InMemoryMetadata> {
+    self.sys.base_fs_metadata(&self.path)
   }
 }
 
