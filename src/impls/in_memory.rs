@@ -1643,6 +1643,12 @@ mod tests {
     let now = SystemTime::now();
     let duration = now.duration_since(modified);
     assert!(duration.is_ok());
+
+    let opened_file = sys.fs_open(file_path, &OpenOptions::new_read()).unwrap();
+    assert_eq!(
+      opened_file.fs_file_metadata().unwrap().modified().unwrap(),
+      modified
+    );
   }
 
   #[test]
