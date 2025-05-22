@@ -148,6 +148,10 @@ extern "C" {
     this: &DenoFsFile,
     len: u32,
   ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(method, structural, js_name = statSync, catch)]
+  fn stat_sync(
+    this: &DenoFsFile,
+  ) -> std::result::Result<JsValue, wasm_bindgen::JsValue>;
   #[wasm_bindgen(method, structural, js_name = isTerminal, catch)]
   fn is_terminal(this: &DenoFsFile) -> std::result::Result<bool, JsValue>;
   #[wasm_bindgen(method, structural, js_name = lockSync, catch)]
@@ -975,6 +979,16 @@ impl FsFileSetLen for WasmFile {
     self
       .file
       .truncate_sync(size as u32)
+      .map_err(js_value_to_io_error)
+  }
+}
+
+impl FsFileMetadata for WasmFile {
+  fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue> {
+    self
+      .file
+      .stat_sync()
+      .map(|m| BoxedFsMetadataValue::new(WasmMetadata(m)))
       .map_err(js_value_to_io_error)
   }
 }

@@ -924,6 +924,16 @@ impl FsFileSetLen for RealFsFile {
   }
 }
 
+impl FsFileMetadata for RealFsFile {
+  #[inline]
+  fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue> {
+    self
+      .0
+      .metadata()
+      .map(|m| BoxedFsMetadataValue::new(RealFsMetadata(m)))
+  }
+}
+
 impl FsFileSetPermissions for RealFsFile {
   #[inline]
   fn fs_file_set_permissions(&mut self, mode: u32) -> Result<()> {

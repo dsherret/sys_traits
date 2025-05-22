@@ -15,6 +15,8 @@ pub mod impls;
 
 pub use sys_traits_macros::auto_impl;
 
+use self::boxed::BoxedFsMetadataValue;
+
 // #### ENVIRONMENT ####
 
 // == EnvCurrentDir ==
@@ -634,6 +636,7 @@ pub trait FsFile:
   + std::io::Seek
   + FsFileIsTerminal
   + FsFileLock
+  + FsFileMetadata
   + FsFileSetPermissions
   + FsFileSetTimes
   + FsFileSetLen
@@ -1005,6 +1008,14 @@ pub trait FsFileLock {
   fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()>;
   fn fs_file_try_lock(&mut self, mode: FsFileLockMode) -> io::Result<()>;
   fn fs_file_unlock(&mut self) -> io::Result<()>;
+}
+
+pub trait FsFileMetadata {
+  /// Gets the file metadata.
+  ///
+  /// This is boxed because I couldn't figure out how to do
+  /// this well with type parameters.
+  fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue>;
 }
 
 pub trait FsFileSetLen {

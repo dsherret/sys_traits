@@ -15,6 +15,7 @@ use crate::*;
 #[derive(Debug, Clone)]
 pub struct InMemoryFile {
   sys: InMemorySys,
+  path: PathBuf,
   inner: Arc<RwLock<FileInner>>,
   pos: usize,
 }
@@ -789,6 +790,7 @@ impl BaseFsOpen for InMemorySys {
           Ok(InMemoryFile {
             sys: self.clone(),
             inner: f.inner.clone(),
+            path,
             pos: if options.append {
               f.inner.read().data.len()
             } else {
@@ -816,6 +818,7 @@ impl BaseFsOpen for InMemorySys {
         let result = InMemoryFile {
           sys: self.clone(),
           inner: new_file.inner.clone(),
+          path,
           pos: if options.append {
             new_file.inner.read().data.len()
           } else {
@@ -1348,6 +1351,15 @@ impl FsFileSetLen for InMemoryFile {
     let mut inner = self.inner.write();
     inner.data.resize(size as usize, 0);
     Ok(())
+  }
+}
+
+impl FsFileMetadata for InMemoryFile {
+  fn fs_file_metadata(&self) -> std::io::Result<BoxedFsMetadataValue> {
+    self
+      .sys
+      .base_fs_metadata(&self.path)
+      .map(BoxedFsMetadataValue::new)
   }
 }
 

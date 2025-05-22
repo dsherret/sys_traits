@@ -28,6 +28,7 @@ use sys_traits::FsDirEntry;
 use sys_traits::FsFileIsTerminal;
 use sys_traits::FsFileLock;
 use sys_traits::FsFileLockMode;
+use sys_traits::FsFileMetadata;
 use sys_traits::FsFileSetLen;
 use sys_traits::FsFileSetTimes;
 use sys_traits::FsFileSyncAll;
@@ -158,6 +159,8 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   // now open for reading
   {
     let mut file = sys.fs_open("file.txt", &OpenOptions::new_read())?;
+    let metadata = file.fs_file_metadata()?;
+    let _mtime = metadata.modified()?;
     let mut text = String::new();
     file.read_to_string(&mut text)?;
     assert_eq!(text, "tello");
