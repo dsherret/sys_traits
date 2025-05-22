@@ -207,7 +207,10 @@ fn run(is_windows: bool) -> std::io::Result<()> {
 
   // just ensure these don't panic
   assert!(sys.env_home_dir().is_some());
-  assert!(sys.env_programs_dir().is_some());
+  assert!(matches!(
+    sys.env_programs_dir(),
+    Some(_) if is_windows
+  ));
   assert!(sys.env_cache_dir().is_some());
   assert!(sys.env_temp_dir().is_ok());
 
