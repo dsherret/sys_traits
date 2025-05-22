@@ -14,6 +14,7 @@ use crate::FsFileAsRaw;
 use crate::FsFileIsTerminal;
 use crate::FsFileLock;
 use crate::FsFileLockMode;
+use crate::FsFileMetadata;
 use crate::FsFileSetLen;
 use crate::FsFileSetPermissions;
 use crate::FsFileSetTimes;
@@ -88,6 +89,13 @@ impl FsFileLock for BoxedFsFile {
   #[inline]
   fn fs_file_unlock(&mut self) -> io::Result<()> {
     self.0.fs_file_unlock()
+  }
+}
+
+impl FsFileMetadata for BoxedFsFile {
+  #[inline]
+  fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue> {
+    self.0.fs_file_metadata()
   }
 }
 
