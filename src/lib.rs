@@ -120,6 +120,12 @@ pub trait EnvHomeDir {
   fn env_home_dir(&self) -> Option<PathBuf>;
 }
 
+// == EnvProgramsDir ==
+
+pub trait EnvProgramsDir {
+  fn env_programs_dir(&self) -> Option<PathBuf>;
+}
+
 // == EnvTempDir ==
 
 pub trait EnvTempDir {

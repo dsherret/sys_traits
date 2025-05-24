@@ -11,6 +11,7 @@ use sys_traits::CreateDirOptions;
 use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
+use sys_traits::EnvProgramsDir;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetUmask;
 use sys_traits::EnvSetVar;
@@ -206,6 +207,7 @@ fn run(is_windows: bool) -> std::io::Result<()> {
 
   // just ensure these don't panic
   assert!(sys.env_home_dir().is_some());
+  assert!(sys.env_programs_dir().is_some() == is_windows);
   assert!(sys.env_cache_dir().is_some());
   assert!(sys.env_temp_dir().is_ok());
 

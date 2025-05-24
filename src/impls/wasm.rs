@@ -266,6 +266,18 @@ impl EnvHomeDir for RealSys {
   }
 }
 
+impl EnvProgramsDir for RealSys {
+  fn env_programs_dir(&self) -> Option<PathBuf> {
+    if is_windows() {
+      self
+        .env_var_path("LOCALAPPDATA")
+        .map(|dir| dir.join("Programs"))
+    } else {
+      None
+    }
+  }
+}
+
 impl EnvTempDir for RealSys {
   fn env_temp_dir(&self) -> std::io::Result<PathBuf> {
     node_tmpdir()
