@@ -15,6 +15,7 @@ pub mod impls;
 
 pub use sys_traits_macros::auto_impl;
 
+use self::boxed::BoxedFsFile;
 use self::boxed::BoxedFsMetadataValue;
 
 // #### ENVIRONMENT ####
@@ -646,10 +647,23 @@ pub trait FsFile:
 {
 }
 
+pub trait BoxableFsFile: Sized {
+  fn into_boxed(self) -> BoxedFsFile;
+}
+
+impl<T> BoxableFsFile for T
+where
+  T: FsFile + Sized + 'static,
+{
+  fn into_boxed(self) -> BoxedFsFile {
+    BoxedFsFile(Box::new(self))
+  }
+}
+
 pub trait BaseFsOpen {
   // ideally this wouldn't be constrained, but by not doing
   // this then the type parameters get really out of hand
-  type File: FsFile;
+  type File: FsFile + Sized + 'static;
 
   #[doc(hidden)]
   fn base_fs_open(

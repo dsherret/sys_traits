@@ -763,6 +763,12 @@ impl BaseFsWrite for RealSys {
 #[derive(Debug)]
 pub struct RealFsFile(fs::File);
 
+impl RealFsFile {
+  pub fn from_raw(file: fs::File) -> Self {
+    Self(file)
+  }
+}
+
 impl FsFile for RealFsFile {}
 
 impl FsFileAsRaw for RealFsFile {
