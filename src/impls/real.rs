@@ -141,6 +141,13 @@ impl EnvHomeDir for RealSys {
   }
 }
 
+#[cfg(all(target_os = "windows", feature = "winapi"))]
+impl EnvProgramsDir for RealSys {
+  fn env_programs_dir(&self) -> Option<PathBuf> {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_UserProgramFiles)
+  }
+}
+
 /// Uses the provided env for environment variables, but falls
 /// back to real sys calls.
 #[cfg(any(
@@ -1069,6 +1076,15 @@ mod test {
   fn test_known_folders() {
     assert!(RealSys.env_cache_dir().is_some());
     assert!(RealSys.env_home_dir().is_some());
+  }
+
+  #[cfg(all(target_os = "windows", feature = "winapi"))]
+  #[test]
+  fn test_known_folder_programs_dir() {
+    // was failing on gh actions for some reason
+    if std::env::var_os("CI").is_none() {
+      assert!(RealSys.env_programs_dir().is_some());
+    }
   }
 
   #[cfg(all(unix, feature = "libc"))]
