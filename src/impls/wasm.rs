@@ -1135,7 +1135,7 @@ impl crate::ThreadSleep for RealSys {
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[inline]
-pub(super) fn is_windows() -> bool {
+pub fn is_windows() -> bool {
   build_os() == Os::Windows
 }
 
