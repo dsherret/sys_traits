@@ -31,6 +31,17 @@ pub use in_memory::InMemoryFile;
 pub use in_memory::InMemorySys;
 
 #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
+pub use wasm::is_windows;
+
+/// Checks if the current executing environment is Windows.
+///
+/// This may be useful to check when executing in Wasm.
+#[cfg(not(all(feature = "wasm", target_arch = "wasm32")))]
+pub fn is_windows() -> bool {
+  cfg!(windows)
+}
+
+#[cfg(all(feature = "wasm", target_arch = "wasm32"))]
 pub type RealFsFile = wasm::WasmFile;
 #[cfg(all(
   feature = "real",
