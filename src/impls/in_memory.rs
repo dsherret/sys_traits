@@ -849,7 +849,7 @@ impl BaseFsReadDir for InMemorySys {
     &self,
     path: &Path,
   ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>> + '_>,
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
   > {
     let inner = self.0.read();
     let abs_path = inner.to_absolute_path(path);

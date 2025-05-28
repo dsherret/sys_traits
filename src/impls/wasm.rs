@@ -716,7 +716,7 @@ impl BaseFsReadDir for RealSys {
     &self,
     path: &Path,
   ) -> std::io::Result<
-    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>> + '_>,
+    Box<dyn Iterator<Item = std::io::Result<Self::ReadDirEntry>>>,
   > {
     let path_str = wasm_path_to_str(path);
 
