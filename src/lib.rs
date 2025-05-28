@@ -765,7 +765,7 @@ pub trait BaseFsReadDir {
   fn base_fs_read_dir(
     &self,
     path: &Path,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>> + '_>>;
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>>;
 }
 
 pub trait FsReadDir: BaseFsReadDir {
@@ -773,8 +773,7 @@ pub trait FsReadDir: BaseFsReadDir {
   fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>> + '_>>
-  {
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>> {
     self.base_fs_read_dir(path.as_ref())
   }
 }

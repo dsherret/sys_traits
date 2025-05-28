@@ -363,15 +363,14 @@ pub trait FsReadDirBoxed {
   fn fs_read_dir_boxed(
     &self,
     path: &Path,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>> + '_>>;
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>>>>;
 }
 
 impl<T: BaseFsReadDir> FsReadDirBoxed for T {
   fn fs_read_dir_boxed(
     &self,
     path: &Path,
-  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>> + '_>>
-  {
+  ) -> io::Result<Box<dyn Iterator<Item = io::Result<BoxedFsDirEntry>>>> {
     let iter = self.base_fs_read_dir(path)?;
     Ok(Box::new(
       iter.map(|result| result.map(BoxedFsDirEntry::new)),
