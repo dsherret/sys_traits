@@ -140,18 +140,12 @@ fn run() -> std::io::Result<()> {
   assert!(!sys.fs_exists_no_err("link.txt"));
   assert!(sys.fs_exists_no_err("file.txt"));
 
+  // seems like this does a symlink on linux
   sys.fs_create_dir_all("junction_dest")?;
-  if is_windows {
-    sys.fs_write("junction_dest/file.txt", "hello")?;
-    sys.fs_create_junction("junction_dest", "junction")?;
-    assert_eq!(sys.fs_read_to_string("junction/file.txt")?, "hello");
-    sys.fs_remove_dir_all("junction")?;
-  } else {
-    let err = sys
-      .fs_create_junction("junction_dest", "junction")
-      .unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  }
+  sys.fs_write("junction_dest/file.txt", "hello")?;
+  sys.fs_create_junction("junction_dest", "junction")?;
+  assert_eq!(sys.fs_read_to_string("junction/file.txt")?, "hello");
+  sys.fs_remove_dir_all("junction")?;
   sys.fs_remove_dir_all("junction_dest")?;
 
   // open an existing file with create_new
