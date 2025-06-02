@@ -140,22 +140,19 @@ fn run() -> std::io::Result<()> {
   assert!(!sys.fs_exists_no_err("link.txt"));
   assert!(sys.fs_exists_no_err("file.txt"));
 
+  sys.fs_create_dir_all("junction_dest")?;
   if is_windows {
-    sys.fs_write(temp_dir.join("file.txt"), "hello")?;
-    sys.fs_create_junction(
-      temp_dir.join("file.txt"),
-      temp_dir.join("junction.txt"),
-    )?;
-    assert_eq!(
-      sys.fs_read_to_string(temp_dir.join("junction.txt"))?,
-      "hello"
-    );
+    sys.fs_write("junction_dest/file.txt", "hello")?;
+    sys.fs_create_junction("junction_dest", "junction")?;
+    assert_eq!(sys.fs_read_to_string("junction/file.txt")?, "hello");
+    sys.fs_remove_dir_all("junction")?;
   } else {
     let err = sys
-      .fs_create_junction("file.txt", "junction.txt")
+      .fs_create_junction("junction_dest", "junction")
       .unwrap_err();
     assert_eq!(err.kind(), ErrorKind::Unsupported);
   }
+  sys.fs_remove_dir_all("junction_dest")?;
 
   // open an existing file with create_new
   {
