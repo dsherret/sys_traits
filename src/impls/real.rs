@@ -340,6 +340,7 @@ impl BaseFsCreateJunction for RealSys {
     }
     #[cfg(all(target_os = "windows", not(feature = "winapi")))]
     {
+      _ = (original, junction);
       Err(Error::new(
         ErrorKind::Unsupported,
         "Enable the 'winapi' feature in sys_traits for junction support.",
@@ -347,6 +348,7 @@ impl BaseFsCreateJunction for RealSys {
     }
     #[cfg(unix)]
     {
+      _ = (original, junction);
       Err(Error::new(
         ErrorKind::Unsupported,
         "Creating NTFS junctions is not supported on this platform",
