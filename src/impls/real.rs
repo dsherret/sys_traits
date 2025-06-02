@@ -328,6 +328,33 @@ impl BaseFsHardLink for RealSys {
   }
 }
 
+impl BaseFsCreateJunction for RealSys {
+  fn base_fs_create_junction(
+    &self,
+    original: &Path,
+    junction: &Path,
+  ) -> io::Result<()> {
+    #[cfg(all(target_os = "windows", feature = "winapi"))]
+    {
+      junction::create(original, junction)
+    }
+    #[cfg(all(target_os = "windows", not(feature = "winapi")))]
+    {
+      Err(Error::new(
+        ErrorKind::Unsupported,
+        "Enable the 'winapi' feature in sys_traits for junction support.",
+      ))
+    }
+    #[cfg(unix)]
+    {
+      Err(Error::new(
+        ErrorKind::Unsupported,
+        "Creating NTFS junctions is not supported on this platform",
+      ))
+    }
+  }
+}
+
 macro_rules! unix_metadata_prop {
   ($id:ident, $type:ident) => {
     #[inline]

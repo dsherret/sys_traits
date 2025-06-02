@@ -127,12 +127,12 @@ pub fn wasm_path_to_str(path: &std::path::Path) -> std::borrow::Cow<str> {
     if wasm::is_windows() {
       let path = path.to_string_lossy();
       let path = path.strip_prefix('/').unwrap_or(&path);
-      std::borrow::Cow::Owned(path.replace("\\", "/"))
+      std::borrow::Cow::Owned(path.replace("/", "\\"))
     } else {
       path.to_string_lossy()
     }
   }
-  #[cfg(not(target_arch = "wasm32"))]
+  #[cfg(any(not(target_arch = "wasm32"), not(feature = "wasm")))]
   {
     path.to_string_lossy()
   }

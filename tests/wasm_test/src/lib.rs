@@ -25,6 +25,7 @@ use sys_traits::FsCloneFile;
 use sys_traits::FsCopy;
 use sys_traits::FsCreateDir;
 use sys_traits::FsCreateDirAll;
+use sys_traits::FsCreateJunction;
 use sys_traits::FsDirEntry;
 use sys_traits::FsFileIsTerminal;
 use sys_traits::FsFileLock;
@@ -65,12 +66,13 @@ extern "C" {
 }
 
 #[wasm_bindgen]
-pub fn run_tests(is_windows: bool) -> Result<(), JsValue> {
+pub fn run_tests() -> Result<(), JsValue> {
   console_error_panic_hook::set_once();
-  run(is_windows).map_err(|e| JsValue::from_str(&format!("{:?}", e)))
+  run().map_err(|e| JsValue::from_str(&format!("{:?}", e)))
 }
 
-fn run(is_windows: bool) -> std::io::Result<()> {
+fn run() -> std::io::Result<()> {
+  let is_windows = sys_traits::impls::is_windows();
   let sys = RealSys::default();
 
   // create dir all
@@ -137,6 +139,23 @@ fn run(is_windows: bool) -> std::io::Result<()> {
   sys.fs_remove_file("link.txt")?;
   assert!(!sys.fs_exists_no_err("link.txt"));
   assert!(sys.fs_exists_no_err("file.txt"));
+
+  if is_windows {
+    sys.fs_write(temp_dir.join("file.txt"), "hello")?;
+    sys.fs_create_junction(
+      temp_dir.join("file.txt"),
+      temp_dir.join("junction.txt"),
+    )?;
+    assert_eq!(
+      sys.fs_read_to_string(temp_dir.join("junction.txt"))?,
+      "hello"
+    );
+  } else {
+    let err = sys
+      .fs_create_junction("file.txt", "junction.txt")
+      .unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Unsupported);
+  }
 
   // open an existing file with create_new
   {

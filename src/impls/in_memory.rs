@@ -616,6 +616,19 @@ impl BaseFsHardLink for InMemorySys {
   }
 }
 
+impl BaseFsCreateJunction for InMemorySys {
+  fn base_fs_create_junction(
+    &self,
+    _original: &Path,
+    _junction: &Path,
+  ) -> io::Result<()> {
+    Err(std::io::Error::new(
+      ErrorKind::Unsupported,
+      "Junctions are not supported in an in-memory sys.",
+    ))
+  }
+}
+
 #[derive(Debug, Clone)]
 pub struct InMemoryMetadata {
   file_type: FileType,
