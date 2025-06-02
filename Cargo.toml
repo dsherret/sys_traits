@@ -25,7 +25,7 @@ real = []
 serde = ["dep:serde"]
 serde_json = ["dep:serde_json", "serde"]
 strip_unc = []
-winapi = ["dep:windows-sys"]
+winapi = ["dep:junction", "dep:windows-sys"]
 wasm = ["real", "dep:js-sys", "dep:wasm-bindgen"]
 
 [dependencies]
@@ -42,6 +42,7 @@ getrandom = { version = "0.2", optional = true }
 libc = { version = "0.2", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+junction = { version = "1.2.0", optional = true }
 windows-sys = { version = "0.59", optional = true, features = ["Win32_Globalization", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

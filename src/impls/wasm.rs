@@ -385,6 +385,16 @@ impl BaseFsHardLink for RealSys {
   }
 }
 
+impl BaseFsCreateJunction for RealSys {
+  fn base_fs_create_junction(
+    &self,
+    original: &Path,
+    junction: &Path,
+  ) -> io::Result<()> {
+    deno_symlink_sync_with_type(original, junction, "junction")
+  }
+}
+
 impl From<&JsValue> for FileType {
   fn from(value: &JsValue) -> Self {
     let is_file = js_sys::Reflect::get(value, &JsValue::from_str("isFile"))
@@ -883,24 +893,7 @@ impl BaseFsSymlinkDir for RealSys {
     original: &Path,
     link: &Path,
   ) -> std::io::Result<()> {
-    let old_path = wasm_path_to_str(original);
-    let new_path = wasm_path_to_str(link);
-
-    // Create an options object for Deno.symlinkSync specifying a directory symlink
-    let options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &options,
-      &wasm_bindgen::JsValue::from_str("type"),
-      &wasm_bindgen::JsValue::from_str("dir"),
-    )
-    .map_err(js_value_to_io_error)?;
-
-    deno_symlink_sync(
-      &old_path,
-      &new_path,
-      &wasm_bindgen::JsValue::from(options),
-    )
-    .map_err(js_value_to_io_error)
+    deno_symlink_sync_with_type(original, link, "dir")
   }
 }
 
@@ -910,25 +903,29 @@ impl BaseFsSymlinkFile for RealSys {
     original: &Path,
     link: &Path,
   ) -> std::io::Result<()> {
-    let old_path = wasm_path_to_str(original);
-    let new_path = wasm_path_to_str(link);
-
-    // Create an options object for Deno.symlinkSync specifying a file symlink
-    let options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &options,
-      &wasm_bindgen::JsValue::from_str("type"),
-      &wasm_bindgen::JsValue::from_str("file"),
-    )
-    .map_err(js_value_to_io_error)?;
-
-    deno_symlink_sync(
-      &old_path,
-      &new_path,
-      &wasm_bindgen::JsValue::from(options),
-    )
-    .map_err(js_value_to_io_error)
+    deno_symlink_sync_with_type(original, link, "file")
   }
+}
+
+fn deno_symlink_sync_with_type(
+  original: &Path,
+  link: &Path,
+  type_str: &'static str,
+) -> std::io::Result<()> {
+  let old_path = wasm_path_to_str(original);
+  let new_path = wasm_path_to_str(link);
+
+  // Create an options object for Deno.symlinkSync specifying the type of symlink
+  let options = js_sys::Object::new();
+  js_sys::Reflect::set(
+    &options,
+    &wasm_bindgen::JsValue::from_str("type"),
+    &wasm_bindgen::JsValue::from_str(type_str),
+  )
+  .map_err(js_value_to_io_error)?;
+
+  deno_symlink_sync(&old_path, &new_path, &wasm_bindgen::JsValue::from(options))
+    .map_err(js_value_to_io_error)
 }
 
 impl BaseFsWrite for RealSys {

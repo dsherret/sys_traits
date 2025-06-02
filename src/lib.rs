@@ -484,6 +484,30 @@ pub trait FsHardLink: BaseFsHardLink {
 
 impl<T: BaseFsHardLink> FsHardLink for T {}
 
+// == FsCreateJunction ==
+
+pub trait BaseFsCreateJunction {
+  #[doc(hidden)]
+  fn base_fs_create_junction(
+    &self,
+    original: &Path,
+    junction: &Path,
+  ) -> io::Result<()>;
+}
+
+pub trait FsCreateJunction: BaseFsCreateJunction {
+  /// Creates an NTFS junction.
+  fn fs_create_junction(
+    &self,
+    original: impl AsRef<Path>,
+    junction: impl AsRef<Path>,
+  ) -> io::Result<()> {
+    self.base_fs_create_junction(original.as_ref(), junction.as_ref())
+  }
+}
+
+impl<T: BaseFsCreateJunction> FsCreateJunction for T {}
+
 // == FsMetadata ==
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
