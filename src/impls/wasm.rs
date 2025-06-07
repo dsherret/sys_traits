@@ -173,12 +173,14 @@ extern "C" {
   fn sync_data_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
 
   // Deno.build
-  #[wasm_bindgen(js_namespace = Deno, js_name = build)]
-  static BUILD: JsValue;
+  #[wasm_bindgen(js_namespace = ["Deno", "build"], js_name = os)]
+  static BUILD_OS: Os;
 
   // Deno.env
-  #[wasm_bindgen(js_namespace = Deno, js_name = env)]
-  static ENV: JsValue;
+  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = get, catch)]
+  fn deno_env_get(key: &str) -> std::result::Result<Option<String>, JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = set, catch)]
+  fn deno_env_set(key: &str, value: &str) -> std::result::Result<(), JsValue>;
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -207,12 +209,8 @@ impl BaseEnvSetCurrentDir for RealSys {
 impl BaseEnvVar for RealSys {
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     let key = key.to_str()?;
-    let get_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("get"))
-      .ok()
-      .and_then(|v| v.dyn_into::<js_sys::Function>().ok())?;
-    let key_js = JsValue::from_str(key);
-    let value_js = get_fn.call1(&ENV, &key_js).ok()?;
-    return value_js.as_string().map(OsString::from);
+    let value = deno_env_get(key).ok()?;
+    value.map(OsString::from)
   }
 }
 
@@ -220,13 +218,7 @@ impl BaseEnvSetVar for RealSys {
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     let key = key.to_str().unwrap();
     let value = value.to_str().unwrap();
-    let set_fn = js_sys::Reflect::get(&ENV, &JsValue::from_str("set"))
-      .ok()
-      .and_then(|v| v.dyn_into::<js_sys::Function>().ok())
-      .unwrap();
-    let key_js = JsValue::from_str(key);
-    let value_js = JsValue::from_str(value);
-    set_fn.call2(&ENV, &key_js, &value_js).unwrap();
+    deno_env_set(key, value).unwrap();
   }
 }
 
@@ -244,14 +236,14 @@ impl EnvSetUmask for RealSys {
 
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
-    match build_os() {
-      Os::Linux => self
-        .env_var_path("XDG_CACHE_HOME")
-        .or_else(|| self.env_home_dir().map(|home| home.join(".cache"))),
-      Os::Mac => self.env_home_dir().map(|h| h.join("Library/Caches")),
+    match *BUILD_OS {
       Os::Windows => self
         .env_var_path("USERPROFILE")
         .map(|dir| dir.join("AppData/Local")),
+      Os::Darwin => self.env_home_dir().map(|h| h.join("Library/Caches")),
+      _ => self
+        .env_var_path("XDG_CACHE_HOME")
+        .or_else(|| self.env_home_dir().map(|home| home.join(".cache"))),
     }
   }
 }
@@ -1133,29 +1125,15 @@ impl crate::ThreadSleep for RealSys {
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[inline]
 pub fn is_windows() -> bool {
-  build_os() == Os::Windows
+  *BUILD_OS == Os::Windows
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Os {
-  Windows,
-  Mac,
-  Linux,
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-pub(super) fn build_os() -> Os {
-  static BUILD_OS: std::sync::OnceLock<Os> = std::sync::OnceLock::new();
-
-  *BUILD_OS.get_or_init(|| {
-    let os = js_sys::Reflect::get(&BUILD, &JsValue::from_str("os")).unwrap();
-    match os.as_string().unwrap().as_str() {
-      "windows" => Os::Windows,
-      "mac" => Os::Mac,
-      _ => Os::Linux,
-    }
-  })
+enum Os {
+  Windows = "windows",
+  Darwin = "darwin",
 }
 
 fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
