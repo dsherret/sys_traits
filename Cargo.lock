@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "sys_traits"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "filetime",
  "getrandom",
