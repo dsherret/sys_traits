@@ -51,7 +51,9 @@ extern "C" {
     options: &JsValue,
   ) -> std::result::Result<JsValue, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = readFileSync, catch)]
-  fn deno_read_file_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  fn deno_read_file_sync(
+    path: &str,
+  ) -> std::result::Result<js_sys::Uint8Array, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno"], js_name = readTextFileSync, catch)]
   fn deno_read_text_file_sync(
     path: &str,
@@ -188,6 +190,14 @@ extern "C" {
 extern "C" {
   #[wasm_bindgen(js_name = tmpdir, catch)]
   fn node_tmpdir() -> std::result::Result<String, JsValue>;
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+#[wasm_bindgen(
+  inline_js = "export function copy_bytes(from, to, dst) { new Uint8Array(to.buffer).set(from, dst) }"
+)]
+extern "C" {
+  fn copy_bytes(from: JsValue, to: JsValue, ptr: *mut u8);
 }
 
 // ==== Environment ====
@@ -705,9 +715,17 @@ impl BaseFsOpen for RealSys {
 impl BaseFsRead for RealSys {
   fn base_fs_read(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
     let s = wasm_path_to_str(path);
-    let v = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
-    let b = js_sys::Uint8Array::new(&v).to_vec();
-    Ok(Cow::Owned(b))
+    let ua = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
+
+    // manually construct a vec to work around bug: https://github.com/dsherret/sys_traits/pull/58
+    let len = ua.byte_length() as usize;
+    let mut vec = Vec::with_capacity(len);
+    copy_bytes(ua.into(), wasm_bindgen::memory(), vec.as_mut_ptr());
+    unsafe {
+      vec.set_len(len);
+    }
+
+    Ok(Cow::Owned(vec))
   }
 }
 
