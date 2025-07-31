@@ -14,99 +14,169 @@ use crate::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
 
-#[wasm_bindgen]
+#[wasm_bindgen(module = "node:fs")]
 extern "C" {
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = chmodSync, catch)]
-  fn deno_chmod_sync(path: &str, mode: u32)
+  #[wasm_bindgen(js_name = chmodSync, catch)]
+  fn node_chmod_sync(path: &str, mode: u32)
     -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = chdir, catch)]
-  fn deno_chdir(path: &str) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = chownSync, catch)]
-  fn deno_chown_sync(
+  #[wasm_bindgen(js_name = copyFileSync, catch)]
+  fn node_copy_file_sync(
+    from: &str,
+    to: &str,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = linkSync, catch)]
+  fn node_link_sync(src: &str, dst: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = lstatSync, catch)]
+  fn node_lstat_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  #[wasm_bindgen(js_name = mkdirSync, catch)]
+  fn node_mkdir_sync(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = openSync, catch)]
+  fn node_open_sync(
+    path: &str,
+    flags: &str,
+    mode: Option<u32>,
+  ) -> std::result::Result<i32, JsValue>;
+  #[wasm_bindgen(js_name = readFileSync, catch)]
+  fn node_read_file_sync(
+    path: &str,
+  ) -> std::result::Result<js_sys::Uint8Array, JsValue>;
+  #[wasm_bindgen(js_name = readdirSync, catch)]
+  fn node_readdir_sync(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<js_sys::Array, JsValue>;
+  #[wasm_bindgen(js_name = readlinkSync, catch)]
+  fn node_readlink_sync(path: &str) -> std::result::Result<String, JsValue>;
+  #[wasm_bindgen(js_name = realpathSync, catch)]
+  fn node_realpath_sync(path: &str) -> std::result::Result<String, JsValue>;
+  #[wasm_bindgen(js_name = rmSync, catch)]
+  fn node_rm_sync(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = renameSync, catch)]
+  fn node_rename_sync(
+    oldpath: &str,
+    newpath: &str,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = statSync, catch)]
+  fn node_stat_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  #[wasm_bindgen(js_name = symlinkSync, catch)]
+  fn node_symlink_sync(
+    target: &str,
+    path: &str,
+    type_: Option<&str>,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = unlinkSync, catch)]
+  fn node_unlink_sync(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = writeFileSync, catch)]
+  fn node_write_file_sync(
+    path: &str,
+    data: &[u8],
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = utimesSync, catch)]
+  fn node_utimes_sync(
+    path: &str,
+    atime: f64,
+    mtime: f64,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = closeSync, catch)]
+  fn node_close_sync(fd: i32) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = readSync, catch)]
+  fn node_read_sync(
+    fd: i32,
+    buffer: &mut [u8],
+    offset: u32,
+    length: u32,
+    position: Option<i64>,
+  ) -> std::result::Result<u32, JsValue>;
+  #[wasm_bindgen(js_name = writeSync, catch)]
+  fn node_write_sync(
+    fd: i32,
+    buffer: &[u8],
+    offset: u32,
+    length: u32,
+    position: Option<i32>,
+  ) -> std::result::Result<u32, JsValue>;
+
+  #[wasm_bindgen(js_name = fstatSync, catch)]
+  fn node_fstat_sync(fd: i32) -> std::result::Result<JsValue, JsValue>;
+  #[wasm_bindgen(js_name = ftruncateSync, catch)]
+  fn node_ftruncate_sync(fd: i32, len: u32)
+    -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = fsyncSync, catch)]
+  fn node_fsync_sync(fd: i32) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = fdatasyncSync, catch)]
+  fn node_fdatasync_sync(fd: i32) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = futimesSync, catch)]
+  fn node_futimes_sync(
+    fd: i32,
+    atime: f64,
+    mtime: f64,
+  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = fchmodSync, catch)]
+  fn node_fchmod_sync(fd: i32, mode: u32) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = chownSync, catch)]
+  fn node_chown_sync(
     path: &str,
     uid: Option<u32>,
     gid: Option<u32>,
   ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = copyFileSync, catch)]
-  fn deno_copy_file_sync(
-    from: &str,
-    to: &str,
+}
+
+#[wasm_bindgen(module = "node:process")]
+extern "C" {
+  #[wasm_bindgen(js_name = cwd, catch)]
+  fn node_process_cwd() -> std::result::Result<String, JsValue>;
+  #[wasm_bindgen(js_name = chdir, catch)]
+  fn node_process_chdir(path: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = umask, catch)]
+  fn node_process_umask(mask: Option<u32>)
+    -> std::result::Result<u32, JsValue>;
+  #[wasm_bindgen(getter, js_name = env)]
+  static NODE_PROCESS_ENV: JsValue;
+  #[wasm_bindgen(getter, js_name = platform)]
+  static NODE_PROCESS_PLATFORM: String;
+}
+
+#[wasm_bindgen(module = "node:tty")]
+extern "C" {
+  #[wasm_bindgen(js_name = isatty)]
+  fn node_tty_isatty(fd: i32) -> bool;
+}
+
+// Polyfill for file locking - Node.js doesn't have built-in file locking
+#[wasm_bindgen(inline_js = r#"
+export function polyfill_file_lock(fd, exclusive) {
+  // This is a no-op polyfill since Node.js doesn't have built-in file locking
+  // In a real implementation, you might use a third-party library like 'proper-lockfile'
+  return Promise.resolve();
+}
+
+export function polyfill_file_unlock(fd) {
+  // This is a no-op polyfill
+  return Promise.resolve();
+}
+"#)]
+extern "C" {
+  #[wasm_bindgen(js_name = polyfill_file_lock, catch)]
+  fn polyfill_file_lock(
+    fd: i32,
+    exclusive: bool,
   ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = cwd, catch)]
-  fn deno_cwd() -> std::result::Result<String, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = linkSync, catch)]
-  fn deno_link_sync(src: &str, dst: &str) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = ["Deno"], js_name = lstatSync, catch)]
-  fn deno_lstat_sync(
-    path: &str,
-  ) -> std::result::Result<JsValue, wasm_bindgen::JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = mkdirSync, catch)]
-  fn deno_mkdir_sync(
-    path: &str,
-    options: &JsValue,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = openSync, catch)]
-  fn deno_open_sync(
-    path: &str,
-    options: &JsValue,
-  ) -> std::result::Result<JsValue, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readFileSync, catch)]
-  fn deno_read_file_sync(
-    path: &str,
-  ) -> std::result::Result<js_sys::Uint8Array, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readTextFileSync, catch)]
-  fn deno_read_text_file_sync(
-    path: &str,
-  ) -> std::result::Result<String, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readDirSync, catch)]
-  fn deno_read_dir_sync(
-    path: &str,
-  ) -> std::result::Result<js_sys::Iterator, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = readLinkSync, catch)]
-  fn deno_read_link_sync(path: &str) -> std::result::Result<String, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = realPathSync, catch)]
-  fn deno_real_path_sync(path: &str) -> std::result::Result<String, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
-  fn deno_remove_sync(path: &str) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = removeSync, catch)]
-  fn deno_remove_sync_options(
-    path: &str,
-    options: &JsValue,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = renameSync, catch)]
-  fn deno_rename_sync(
-    oldpath: &str,
-    newpath: &str,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen::prelude::wasm_bindgen(js_namespace = ["Deno"], js_name = statSync, catch)]
-  fn deno_stat_sync(
-    path: &str,
-  ) -> std::result::Result<JsValue, wasm_bindgen::JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = symlinkSync, catch)]
-  fn deno_symlink_sync(
-    old_path: &str,
-    new_path: &str,
-    options: &JsValue,
-  ) -> std::result::Result<(), wasm_bindgen::JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = umask, catch)]
-  fn deno_umask() -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = umask, catch)]
-  fn deno_set_umask(value: u32) -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = writeFileSync, catch)]
-  fn deno_write_file_sync(
-    path: &str,
-    data: &[u8],
-  ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = polyfill_file_unlock, catch)]
+  fn polyfill_file_unlock(fd: i32) -> std::result::Result<(), JsValue>;
+}
+
+#[wasm_bindgen]
+extern "C" {
   #[wasm_bindgen(js_namespace = ["globalThis", "Date"], js_name = now)]
   fn date_now() -> f64;
   #[wasm_bindgen(js_namespace = ["globalThis", "crypto"], js_name = getRandomValues, catch)]
   fn get_random_values(buf: &mut [u8]) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = utimeSync, catch)]
-  fn deno_utime_sync(
-    path: &str,
-    atime: js_sys::Date,
-    mtime: js_sys::Date,
-  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = Atomics, js_name = wait)]
   fn atomics_wait(
     i32array: &js_sys::Int32Array,
@@ -115,74 +185,11 @@ extern "C" {
     timeout: f64,
   ) -> String;
 
-  // Deno.FsFile
-  #[wasm_bindgen(js_namespace = ["Deno"], js_name = FsFile)]
-  #[derive(Clone, Debug)]
-  type DenoFsFile;
-  #[wasm_bindgen(method, structural, js_name = close)]
-  fn close_internal(this: &DenoFsFile);
-  #[wasm_bindgen(method, structural, js_name = writeSync, catch)]
-  fn write_sync_internal(
-    this: &DenoFsFile,
-    data: &[u8],
-  ) -> std::result::Result<usize, JsValue>;
-  #[wasm_bindgen(method, structural, js_name = syncSync)]
-  fn sync_internal(this: &DenoFsFile);
-  #[wasm_bindgen(method, structural, js_name = readSync, catch)]
-  fn read_sync_internal(
-    this: &DenoFsFile,
-    buffer: &mut [u8],
-  ) -> std::result::Result<usize, JsValue>;
-  #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
-  fn seek_sync_i64_internal(
-    this: &DenoFsFile,
-    offset: i64,
-    seek_mode: u32,
-  ) -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(method, structural, js_name = seekSync, catch)]
-  fn seek_sync_u64_internal(
-    this: &DenoFsFile,
-    offset: u64,
-    seek_mode: u32,
-  ) -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(method, structural, js_name = truncateSync, catch)]
-  fn truncate_sync(
-    this: &DenoFsFile,
-    len: u32,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(method, structural, js_name = statSync, catch)]
-  fn stat_sync(
-    this: &DenoFsFile,
-  ) -> std::result::Result<JsValue, wasm_bindgen::JsValue>;
-  #[wasm_bindgen(method, structural, js_name = isTerminal, catch)]
-  fn is_terminal(this: &DenoFsFile) -> std::result::Result<bool, JsValue>;
-  #[wasm_bindgen(method, structural, js_name = lockSync, catch)]
-  fn lock_sync(
-    this: &DenoFsFile,
-    exclusive: bool,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(method, structural, js_name = unlockSync, catch)]
-  fn unlock_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(method, structural, js_name = utimeSync, catch)]
-  fn utime_sync(
-    this: &DenoFsFile,
-    atime: js_sys::Date,
-    mtime: js_sys::Date,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(method, structural, js_name = syncSync, catch)]
-  fn sync_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(method, structural, js_name = syncDataSync, catch)]
-  fn sync_data_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
-
-  // Deno.build
-  #[wasm_bindgen(js_namespace = ["Deno", "build"], js_name = os)]
-  static BUILD_OS: Os;
-
-  // Deno.env
-  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = get, catch)]
-  fn deno_env_get(key: &str) -> std::result::Result<Option<String>, JsValue>;
-  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = set, catch)]
-  fn deno_env_set(key: &str, value: &str) -> std::result::Result<(), JsValue>;
+  // Node.js TTY for terminal detection
+  #[wasm_bindgen(js_namespace = ["require", "tty"])]
+  type NodeTty;
+  #[wasm_bindgen(static_method_of = NodeTty, js_name = isatty)]
+  fn is_tty(fd: i32) -> bool;
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -204,7 +211,7 @@ extern "C" {
 
 impl EnvCurrentDir for RealSys {
   fn env_current_dir(&self) -> std::io::Result<PathBuf> {
-    deno_cwd()
+    node_process_cwd()
       .map(wasm_string_to_path)
       .map_err(|err| js_value_to_io_error(err))
   }
@@ -212,15 +219,17 @@ impl EnvCurrentDir for RealSys {
 
 impl BaseEnvSetCurrentDir for RealSys {
   fn base_env_set_current_dir(&self, path: &Path) -> std::io::Result<()> {
-    deno_chdir(&wasm_path_to_str(path)).map_err(js_value_to_io_error)
+    node_process_chdir(&wasm_path_to_str(path)).map_err(js_value_to_io_error)
   }
 }
 
 impl BaseEnvVar for RealSys {
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     let key = key.to_str()?;
-    let value = deno_env_get(key).ok()?;
-    value.map(OsString::from)
+    let env_obj = &NODE_PROCESS_ENV;
+    let js_key = JsValue::from_str(key);
+    let value = js_sys::Reflect::get(env_obj, &js_key).ok()?;
+    value.as_string().map(OsString::from)
   }
 }
 
@@ -228,32 +237,37 @@ impl BaseEnvSetVar for RealSys {
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     let key = key.to_str().unwrap();
     let value = value.to_str().unwrap();
-    deno_env_set(key, value).unwrap();
+    let env_obj = &NODE_PROCESS_ENV;
+    let js_key = JsValue::from_str(key);
+    let js_value = JsValue::from_str(value);
+    js_sys::Reflect::set(env_obj, &js_key, &js_value).unwrap();
   }
 }
 
 impl EnvUmask for RealSys {
   fn env_umask(&self) -> std::io::Result<u32> {
-    deno_umask().map_err(js_value_to_io_error)
+    node_process_umask(None).map_err(js_value_to_io_error)
   }
 }
 
 impl EnvSetUmask for RealSys {
   fn env_set_umask(&self, umask: u32) -> std::io::Result<u32> {
-    deno_set_umask(umask).map_err(js_value_to_io_error)
+    node_process_umask(Some(umask)).map_err(js_value_to_io_error)
   }
 }
 
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
-    match *BUILD_OS {
-      Os::Windows => self
+    if is_windows() {
+      self
         .env_var_path("USERPROFILE")
-        .map(|dir| dir.join("AppData/Local")),
-      Os::Darwin => self.env_home_dir().map(|h| h.join("Library/Caches")),
-      _ => self
+        .map(|dir| dir.join("AppData/Local"))
+    } else if &*NODE_PROCESS_PLATFORM == "darwin" {
+      self.env_home_dir().map(|h| h.join("Library/Caches"))
+    } else {
+      self
         .env_var_path("XDG_CACHE_HOME")
-        .or_else(|| self.env_home_dir().map(|home| home.join(".cache"))),
+        .or_else(|| self.env_home_dir().map(|home| home.join(".cache")))
     }
   }
 }
@@ -292,7 +306,7 @@ impl EnvTempDir for RealSys {
 
 impl BaseFsCanonicalize for RealSys {
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
-    deno_real_path_sync(&wasm_path_to_str(path))
+    node_realpath_sync(&wasm_path_to_str(path))
       .map(wasm_string_to_path)
       .map_err(js_value_to_io_error)
   }
@@ -305,7 +319,7 @@ impl BaseFsChown for RealSys {
     uid: Option<u32>,
     gid: Option<u32>,
   ) -> Result<()> {
-    deno_chown_sync(&wasm_path_to_str(path), uid, gid)
+    node_chown_sync(&wasm_path_to_str(path), uid, gid)
       .map_err(js_value_to_io_error)
   }
 }
@@ -327,7 +341,7 @@ impl BaseFsSymlinkChown for RealSys {
 impl BaseFsCopy for RealSys {
   #[inline]
   fn base_fs_copy(&self, from: &Path, to: &Path) -> std::io::Result<u64> {
-    deno_copy_file_sync(&wasm_path_to_str(from), &wasm_path_to_str(to))
+    node_copy_file_sync(&wasm_path_to_str(from), &wasm_path_to_str(to))
       .map(|()| 0) // this is fine, nobody uses this return value
       .map_err(js_value_to_io_error)
   }
@@ -372,8 +386,8 @@ impl BaseFsCreateDir for RealSys {
       .map_err(|e| js_value_to_io_error(e))?;
     }
 
-    // Call the Deno.mkdirSync function
-    deno_mkdir_sync(&path_str, &JsValue::from(js_options))
+    // Call the Node.js fs.mkdirSync function
+    node_mkdir_sync(&path_str, &JsValue::from(js_options))
       .map_err(|e| js_value_to_io_error(e))
   }
 }
@@ -383,7 +397,7 @@ impl BaseFsHardLink for RealSys {
     let src_str = wasm_path_to_str(src);
     let dst_str = wasm_path_to_str(dst);
 
-    deno_link_sync(&src_str, &dst_str).map_err(js_value_to_io_error)
+    node_link_sync(&src_str, &dst_str).map_err(js_value_to_io_error)
   }
 }
 
@@ -393,36 +407,60 @@ impl BaseFsCreateJunction for RealSys {
     original: &Path,
     junction: &Path,
   ) -> io::Result<()> {
-    deno_symlink_sync_with_type(original, junction, "junction")
+    node_symlink_sync_with_type(original, junction, "junction")
   }
 }
 
 impl From<&JsValue> for FileType {
   fn from(value: &JsValue) -> Self {
-    let is_file = js_sys::Reflect::get(value, &JsValue::from_str("isFile"))
+    use wasm_bindgen::JsCast;
+
+    // Node.js Stats objects have methods like isFile(), isDirectory(), etc.
+    let is_file_fn = js_sys::Reflect::get(value, &JsValue::from_str("isFile"))
       .ok()
-      .and_then(|v| v.as_bool())
-      .unwrap_or(false);
-    if is_file {
-      return FileType::File;
+      .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
+
+    if let Some(is_file_fn) = is_file_fn {
+      let is_file =
+        js_sys::Reflect::apply(&is_file_fn, value, &js_sys::Array::new())
+          .ok()
+          .and_then(|v| v.as_bool())
+          .unwrap_or(false);
+      if is_file {
+        return FileType::File;
+      }
     }
 
-    let is_directory =
+    let is_directory_fn =
       js_sys::Reflect::get(value, &JsValue::from_str("isDirectory"))
         .ok()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if is_directory {
-      return FileType::Dir;
+        .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
+
+    if let Some(is_directory_fn) = is_directory_fn {
+      let is_directory =
+        js_sys::Reflect::apply(&is_directory_fn, value, &js_sys::Array::new())
+          .ok()
+          .and_then(|v| v.as_bool())
+          .unwrap_or(false);
+      if is_directory {
+        return FileType::Dir;
+      }
     }
 
-    let is_symlink =
-      js_sys::Reflect::get(value, &JsValue::from_str("isSymlink"))
+    let is_symlink_fn =
+      js_sys::Reflect::get(value, &JsValue::from_str("isSymbolicLink"))
         .ok()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if is_symlink {
-      return FileType::Symlink;
+        .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
+
+    if let Some(is_symlink_fn) = is_symlink_fn {
+      let is_symlink =
+        js_sys::Reflect::apply(&is_symlink_fn, value, &js_sys::Array::new())
+          .ok()
+          .and_then(|v| v.as_bool())
+          .unwrap_or(false);
+      if is_symlink {
+        return FileType::Symlink;
+      }
     }
 
     FileType::Unknown
@@ -635,13 +673,37 @@ fn get_prop(value: &JsValue, prop: &'static str) -> Result<JsValue> {
   })
 }
 
+#[wasm_bindgen]
+extern "C" {
+  // Use `js_namespace` here to bind `console.log(..)` instead of just
+  // `log(..)`
+  #[wasm_bindgen(js_namespace = console)]
+  fn log(s: &str);
+
+  // The `console.log` is quite polymorphic, so we can bind it with multiple
+  // signatures. Note that we need to use `js_name` to ensure we always call
+  // `log` in JS.
+  #[wasm_bindgen(js_namespace = console, js_name = log)]
+  fn log_u32(a: u32);
+
+  // Multiple arguments too!
+  #[wasm_bindgen(js_namespace = console, js_name = log)]
+  fn log_many(a: &str, b: &str);
+}
+
+macro_rules! console_log {
+    // Note that this is using the `log` function imported above during
+    // `bare_bones`
+    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
+}
+
 impl BaseFsMetadata for RealSys {
   type Metadata = WasmMetadata;
 
   #[inline]
   fn base_fs_metadata(&self, path: &Path) -> Result<WasmMetadata> {
     let s = wasm_path_to_str(path);
-    match deno_stat_sync(&s) {
+    match node_stat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
     }
@@ -650,7 +712,7 @@ impl BaseFsMetadata for RealSys {
   #[inline]
   fn base_fs_symlink_metadata(&self, path: &Path) -> Result<WasmMetadata> {
     let s = wasm_path_to_str(path);
-    match deno_lstat_sync(&s) {
+    match node_lstat_sync(&s) {
       Ok(v) => Ok(WasmMetadata(v)),
       Err(e) => Err(js_value_to_io_error(e)),
     }
@@ -666,56 +728,55 @@ impl BaseFsOpen for RealSys {
     options: &OpenOptions,
   ) -> std::io::Result<WasmFile> {
     let s = wasm_path_to_str(path).into_owned();
-    let js_options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("read"),
-      &JsValue::from_bool(options.read),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("write"),
-      &JsValue::from_bool(options.write),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("create"),
-      &JsValue::from_bool(options.create),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("truncate"),
-      &JsValue::from_bool(options.truncate),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("append"),
-      &JsValue::from_bool(options.append),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("createNew"),
-      &JsValue::from_bool(options.create_new),
-    )
-    .map_err(js_value_to_io_error)?;
-    let js_file =
-      deno_open_sync(&s, &js_options).map_err(js_value_to_io_error)?;
-    let file = js_file
-      .dyn_into::<DenoFsFile>()
-      .map_err(js_value_to_io_error)?;
-    Ok(WasmFile { file, path: s })
+
+    // Convert OpenOptions to Node.js flags
+    let flags = if options.create_new {
+      "wx" // This should produce EEXIST if file exists
+    } else if options.append {
+      "a"
+    } else if options.write && options.create && options.truncate {
+      "w"
+    } else if options.write && options.create {
+      "r+"
+    } else if options.write {
+      "r+"
+    } else {
+      "r"
+    };
+
+    let mode = options.mode;
+    console_log!(
+      "Opening file: {} with flags: {} and mode: {}",
+      s,
+      flags,
+      mode.unwrap_or(0o666)
+    );
+    let fd = node_open_sync(&s, flags, mode).map_err(js_value_to_io_error)?;
+
+    // Set initial position based on flags
+    let initial_position = if options.append {
+      // For append mode, start at the end of the file
+      let metadata = node_fstat_sync(fd).map_err(js_value_to_io_error)?;
+      js_sys::Reflect::get(&metadata, &JsValue::from_str("size"))
+        .map_err(js_value_to_io_error)?
+        .as_f64()
+        .unwrap_or(0.0) as u64
+    } else {
+      0
+    };
+
+    Ok(WasmFile {
+      fd,
+      path: s,
+      position: initial_position,
+    })
   }
 }
 
 impl BaseFsRead for RealSys {
   fn base_fs_read(&self, path: &Path) -> Result<Cow<'static, [u8]>> {
     let s = wasm_path_to_str(path);
-    let ua = deno_read_file_sync(&s).map_err(js_value_to_io_error)?;
+    let ua = node_read_file_sync(&s).map_err(js_value_to_io_error)?;
 
     // manually construct a vec to work around bug: https://github.com/dsherret/sys_traits/pull/58
     let len = ua.byte_length() as usize;
@@ -740,22 +801,27 @@ impl BaseFsReadDir for RealSys {
   > {
     let path_str = wasm_path_to_str(path);
 
-    // Use Deno.readDirSync to get directory entries
-    let entries =
-      deno_read_dir_sync(&path_str).map_err(js_value_to_io_error)?;
+    // Configure readdir with withFileTypes option
+    let js_options = js_sys::Object::new();
+    js_sys::Reflect::set(
+      &js_options,
+      &JsValue::from_str("withFileTypes"),
+      &JsValue::from_bool(true),
+    )
+    .map_err(js_value_to_io_error)?;
+
+    // Use Node.js fs.readdirSync to get directory entries
+    let entries = node_readdir_sync(&path_str, &js_options)
+      .map_err(js_value_to_io_error)?;
 
     let path = path.to_path_buf();
-    Ok(Box::new(entries.into_iter().map(move |entry| {
-      entry
-        .map_err(|_| {
-          Error::new(ErrorKind::Other, "Failed to iterate over entries")
-        })
-        .and_then(|value| {
-          Ok(WasmFsDirEntry {
-            value,
-            parent_path: path.clone(),
-          })
-        })
+    let entries_vec: Vec<JsValue> = js_sys::Array::from(&entries).to_vec();
+
+    Ok(Box::new(entries_vec.into_iter().map(move |entry| {
+      Ok(WasmFsDirEntry {
+        value: entry,
+        parent_path: path.clone(),
+      })
     })))
   }
 }
@@ -763,7 +829,7 @@ impl BaseFsReadDir for RealSys {
 impl BaseFsReadLink for RealSys {
   fn base_fs_read_link(&self, path: &Path) -> io::Result<PathBuf> {
     let s = wasm_path_to_str(path);
-    deno_read_link_sync(&s)
+    node_readlink_sync(&s)
       .map(wasm_string_to_path)
       .map_err(js_value_to_io_error)
   }
@@ -787,12 +853,65 @@ impl FsDirEntry for WasmFsDirEntry {
   }
 
   fn file_type(&self) -> std::io::Result<FileType> {
-    Ok((&self.value).into())
+    use wasm_bindgen::JsCast;
+
+    // Node.js Dirent objects have methods like isFile(), isDirectory(), etc.
+    let is_file_fn =
+      js_sys::Reflect::get(&self.value, &JsValue::from_str("isFile"))
+        .map_err(js_value_to_io_error)?
+        .dyn_into::<js_sys::Function>()
+        .map_err(js_value_to_io_error)?;
+    let is_file =
+      js_sys::Reflect::apply(&is_file_fn, &self.value, &js_sys::Array::new())
+        .map_err(js_value_to_io_error)?;
+
+    if is_file.as_bool().unwrap_or(false) {
+      return Ok(FileType::File);
+    }
+
+    let is_directory_fn =
+      js_sys::Reflect::get(&self.value, &JsValue::from_str("isDirectory"))
+        .map_err(js_value_to_io_error)?
+        .dyn_into::<js_sys::Function>()
+        .map_err(js_value_to_io_error)?;
+    let is_directory = js_sys::Reflect::apply(
+      &is_directory_fn,
+      &self.value,
+      &js_sys::Array::new(),
+    )
+    .map_err(js_value_to_io_error)?;
+
+    if is_directory.as_bool().unwrap_or(false) {
+      return Ok(FileType::Dir);
+    }
+
+    let is_symlink_fn =
+      js_sys::Reflect::get(&self.value, &JsValue::from_str("isSymbolicLink"))
+        .map_err(js_value_to_io_error)?
+        .dyn_into::<js_sys::Function>()
+        .map_err(js_value_to_io_error)?;
+    let is_symlink = js_sys::Reflect::apply(
+      &is_symlink_fn,
+      &self.value,
+      &js_sys::Array::new(),
+    )
+    .map_err(js_value_to_io_error)?;
+
+    if is_symlink.as_bool().unwrap_or(false) {
+      return Ok(FileType::Symlink);
+    }
+
+    Ok(FileType::Unknown)
   }
 
   fn metadata(&self) -> std::io::Result<Self::Metadata> {
-    // Use the same `self.inner` for metadata as it includes file stats
-    Ok(WasmMetadata(self.value.clone().into()))
+    // For Node.js, we need to stat the file to get metadata
+    let path = self.path();
+    let s = wasm_path_to_str(&path);
+    match node_stat_sync(&s) {
+      Ok(v) => Ok(WasmMetadata(v)),
+      Err(e) => Err(js_value_to_io_error(e)),
+    }
   }
 
   fn path(&self) -> Cow<Path> {
@@ -808,7 +927,13 @@ impl BaseFsRemoveDir for RealSys {
   fn base_fs_remove_dir(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
     let options = js_sys::Object::new();
-    deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
+    js_sys::Reflect::set(
+      &options,
+      &JsValue::from_str("recursive"),
+      &JsValue::from_bool(false),
+    )
+    .map_err(js_value_to_io_error)?;
+    node_rm_sync(&s, &options).map_err(js_value_to_io_error)
   }
 }
 
@@ -822,14 +947,20 @@ impl BaseFsRemoveDirAll for RealSys {
       &JsValue::from_bool(true),
     )
     .map_err(js_value_to_io_error)?;
-    deno_remove_sync_options(&s, &options).map_err(js_value_to_io_error)
+    js_sys::Reflect::set(
+      &options,
+      &JsValue::from_str("force"),
+      &JsValue::from_bool(true),
+    )
+    .map_err(js_value_to_io_error)?;
+    node_rm_sync(&s, &options).map_err(js_value_to_io_error)
   }
 }
 
 impl BaseFsRemoveFile for RealSys {
   fn base_fs_remove_file(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
-    deno_remove_sync(&s).map_err(js_value_to_io_error)
+    node_unlink_sync(&s).map_err(js_value_to_io_error)
   }
 }
 
@@ -837,7 +968,7 @@ impl BaseFsRename for RealSys {
   fn base_fs_rename(&self, from: &Path, to: &Path) -> std::io::Result<()> {
     let f = wasm_path_to_str(from);
     let t = wasm_path_to_str(to);
-    deno_rename_sync(&f, &t).map_err(js_value_to_io_error)
+    node_rename_sync(&f, &t).map_err(js_value_to_io_error)
   }
 }
 
@@ -849,26 +980,23 @@ impl BaseFsSetFileTimes for RealSys {
     atime: SystemTime,
     mtime: SystemTime,
   ) -> Result<()> {
-    // js_sys::Date is used because it has more precision than
-    // providing a number, which only has millisecond precision
-
-    let atime = system_time_to_js_date(atime)?;
-    let mtime = system_time_to_js_date(mtime)?;
-    deno_utime_sync(&wasm_path_to_str(path), atime, mtime)
+    let atime_secs = system_time_to_secs(atime)?;
+    let mtime_secs = system_time_to_secs(mtime)?;
+    node_utimes_sync(&wasm_path_to_str(path), atime_secs, mtime_secs)
       .map_err(js_value_to_io_error)
   }
 }
 
-fn system_time_to_js_date(system_time: SystemTime) -> Result<js_sys::Date> {
+fn system_time_to_secs(system_time: SystemTime) -> Result<f64> {
   let duration_since_epoch = system_time
     .duration_since(SystemTime::UNIX_EPOCH)
     .map_err(|_| {
       Error::new(ErrorKind::InvalidInput, "SystemTime before UNIX EPOCH")
     })?;
-  let millis = duration_since_epoch.as_secs() * 1000
-    + duration_since_epoch.subsec_millis() as u64;
+  let secs = duration_since_epoch.as_secs() as f64
+    + duration_since_epoch.subsec_nanos() as f64 / 1_000_000_000.0;
 
-  Ok(js_sys::Date::new(&JsValue::from_f64(millis as f64)))
+  Ok(secs)
 }
 
 impl BaseFsSetSymlinkFileTimes for RealSys {
@@ -893,7 +1021,7 @@ impl BaseFsSetPermissions for RealSys {
     mode: u32,
   ) -> std::io::Result<()> {
     let path = wasm_path_to_str(path);
-    deno_chmod_sync(&path, mode).map_err(js_value_to_io_error)
+    node_chmod_sync(&path, mode).map_err(js_value_to_io_error)
   }
 }
 
@@ -903,7 +1031,7 @@ impl BaseFsSymlinkDir for RealSys {
     original: &Path,
     link: &Path,
   ) -> std::io::Result<()> {
-    deno_symlink_sync_with_type(original, link, "dir")
+    node_symlink_sync_with_type(original, link, "dir")
   }
 }
 
@@ -913,35 +1041,27 @@ impl BaseFsSymlinkFile for RealSys {
     original: &Path,
     link: &Path,
   ) -> std::io::Result<()> {
-    deno_symlink_sync_with_type(original, link, "file")
+    node_symlink_sync_with_type(original, link, "file")
   }
 }
 
-fn deno_symlink_sync_with_type(
+fn node_symlink_sync_with_type(
   original: &Path,
   link: &Path,
   type_str: &'static str,
 ) -> std::io::Result<()> {
-  let old_path = wasm_path_to_str(original);
-  let new_path = wasm_path_to_str(link);
+  let target = wasm_path_to_str(original);
+  let path = wasm_path_to_str(link);
 
-  // Create an options object for Deno.symlinkSync specifying the type of symlink
-  let options = js_sys::Object::new();
-  js_sys::Reflect::set(
-    &options,
-    &wasm_bindgen::JsValue::from_str("type"),
-    &wasm_bindgen::JsValue::from_str(type_str),
-  )
-  .map_err(js_value_to_io_error)?;
-
-  deno_symlink_sync(&old_path, &new_path, &wasm_bindgen::JsValue::from(options))
+  // Node.js symlinkSync takes (target, path, type)
+  node_symlink_sync(&target, &path, Some(type_str))
     .map_err(js_value_to_io_error)
 }
 
 impl BaseFsWrite for RealSys {
   fn base_fs_write(&self, path: &Path, data: &[u8]) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
-    deno_write_file_sync(&s, data).map_err(js_value_to_io_error)
+    node_write_file_sync(&s, data).map_err(js_value_to_io_error)
   }
 }
 
@@ -949,13 +1069,14 @@ impl BaseFsWrite for RealSys {
 
 #[derive(Debug)]
 pub struct WasmFile {
-  file: DenoFsFile,
+  fd: i32,
   path: String,
+  position: u64,
 }
 
 impl Drop for WasmFile {
   fn drop(&mut self) {
-    self.file.close_internal();
+    let _ = node_close_sync(self.fd);
   }
 }
 
@@ -966,47 +1087,40 @@ impl FsFileAsRaw for WasmFile {}
 impl FsFileIsTerminal for WasmFile {
   #[inline]
   fn fs_file_is_terminal(&self) -> bool {
-    self.file.is_terminal().unwrap_or(false)
+    node_tty_isatty(self.fd)
   }
 }
 
 impl FsFileLock for WasmFile {
   fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
-    self
-      .file
-      .lock_sync(match mode {
-        FsFileLockMode::Shared => false,
-        FsFileLockMode::Exclusive => true,
-      })
-      .map_err(js_value_to_io_error)
+    let exclusive = match mode {
+      FsFileLockMode::Shared => false,
+      FsFileLockMode::Exclusive => true,
+    };
+    polyfill_file_lock(self.fd, exclusive).map_err(js_value_to_io_error)
   }
 
   fn fs_file_try_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
     Err(Error::new(
       ErrorKind::Unsupported,
-      "try_lock is not supported in Wasm",
+      "try_lock is not supported in Node.js WASM",
     ))
   }
 
   fn fs_file_unlock(&mut self) -> io::Result<()> {
-    self.file.unlock_sync().map_err(js_value_to_io_error)
+    polyfill_file_unlock(self.fd).map_err(js_value_to_io_error)
   }
 }
 
 impl FsFileSetLen for WasmFile {
   fn fs_file_set_len(&mut self, size: u64) -> std::io::Result<()> {
-    self
-      .file
-      .truncate_sync(size as u32)
-      .map_err(js_value_to_io_error)
+    node_ftruncate_sync(self.fd, size as u32).map_err(js_value_to_io_error)
   }
 }
 
 impl FsFileMetadata for WasmFile {
   fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue> {
-    self
-      .file
-      .stat_sync()
+    node_fstat_sync(self.fd)
       .map(|m| BoxedFsMetadataValue::new(WasmMetadata(m)))
       .map_err(js_value_to_io_error)
   }
@@ -1017,7 +1131,7 @@ impl FsFileSetPermissions for WasmFile {
     if is_windows() {
       return Ok(()); // ignore
     }
-    deno_chmod_sync(&self.path, mode).map_err(js_value_to_io_error)
+    node_fchmod_sync(self.fd, mode).map_err(js_value_to_io_error)
   }
 }
 
@@ -1029,18 +1143,16 @@ impl FsFileSetTimes for WasmFile {
     fn err() -> std::io::Error {
       std::io::Error::new(
         std::io::ErrorKind::Unsupported,
-        "must provide both accessed and modified times when setting file times in Wasm",
+        "must provide both accessed and modified times when setting file times in Node.js WASM",
       )
     }
 
     let FsFileTimes { accessed, modified } = file_times;
     let atime = accessed.ok_or_else(|| err())?;
     let mtime = modified.ok_or_else(|| err())?;
-    let atime = system_time_to_js_date(atime)?;
-    let mtime = system_time_to_js_date(mtime)?;
-    self
-      .file
-      .utime_sync(atime, mtime)
+    let atime_secs = system_time_to_secs(atime)?;
+    let mtime_secs = system_time_to_secs(mtime)?;
+    node_futimes_sync(self.fd, atime_secs, mtime_secs)
       .map_err(js_value_to_io_error)
   }
 }
@@ -1048,59 +1160,79 @@ impl FsFileSetTimes for WasmFile {
 impl FsFileSyncAll for WasmFile {
   #[inline]
   fn fs_file_sync_all(&mut self) -> io::Result<()> {
-    self.file.sync_sync().map_err(js_value_to_io_error)
+    node_fsync_sync(self.fd).map_err(js_value_to_io_error)
   }
 }
 
 impl FsFileSyncData for WasmFile {
   #[inline]
   fn fs_file_sync_data(&mut self) -> io::Result<()> {
-    self.file.sync_data_sync().map_err(js_value_to_io_error)
+    node_fdatasync_sync(self.fd).map_err(js_value_to_io_error)
   }
 }
 
 impl std::io::Seek for WasmFile {
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
-    match pos {
-      std::io::SeekFrom::Start(offset) => self
-        .file
-        .seek_sync_u64_internal(offset, 0)
-        .map(|v| v as u64)
-        .map_err(js_value_to_io_error),
-      std::io::SeekFrom::End(offset) => self
-        .file
-        .seek_sync_i64_internal(offset, 2)
-        .map(|v| v as u64)
-        .map_err(js_value_to_io_error),
-      std::io::SeekFrom::Current(offset) => self
-        .file
-        .seek_sync_i64_internal(offset, 1)
-        .map(|v| v as u64)
-        .map_err(js_value_to_io_error),
-    }
+    console_log!("Current position: {}", self.position);
+    console_log!("SeekFrom: {:?}", pos);
+    let new_position = match pos {
+      std::io::SeekFrom::Start(offset) => offset,
+      std::io::SeekFrom::End(offset) => {
+        console_log!("SeekFrom::End({})", offset);
+        // We need to get file size first
+        let metadata =
+          node_fstat_sync(self.fd).map_err(js_value_to_io_error)?;
+        let size = js_sys::Reflect::get(&metadata, &JsValue::from_str("size"))
+          .map_err(js_value_to_io_error)?
+          .as_f64()
+          .unwrap_or(0.0) as u64;
+        console_log!("File size: {}", size);
+        (size as i64 + offset) as u64
+      }
+      std::io::SeekFrom::Current(offset) => {
+        (self.position as i64 + offset) as u64
+      }
+    };
+    console_log!("New position: {}", new_position);
+    self.position = new_position;
+    Ok(new_position)
   }
 }
 
 impl std::io::Write for WasmFile {
   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-    self
-      .file
-      .write_sync_internal(buf)
-      .map_err(js_value_to_io_error)
+    console_log!("Current position: {}", self.position);
+    console_log!("Writing buffer: {:?}", buf);
+    let bytes_written = node_write_sync(
+      self.fd,
+      buf,
+      0,
+      buf.len() as u32,
+      Some(self.position as i32),
+    )
+    .map_err(js_value_to_io_error)? as usize;
+    self.position += bytes_written as u64;
+    Ok(bytes_written)
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
-    self.file.sync_internal();
-    Ok(())
+    console_log!("Flushing file: {}", self.path);
+    node_fsync_sync(self.fd).map_err(js_value_to_io_error)
   }
 }
 
 impl std::io::Read for WasmFile {
   fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-    self
-      .file
-      .read_sync_internal(buf)
-      .map_err(js_value_to_io_error)
+    let bytes_read = node_read_sync(
+      self.fd,
+      buf,
+      0,
+      buf.len() as u32,
+      Some(self.position as i64),
+    )
+    .map_err(js_value_to_io_error)? as usize;
+    self.position += bytes_read as u64;
+    Ok(bytes_read)
   }
 }
 
@@ -1143,43 +1275,83 @@ impl crate::ThreadSleep for RealSys {
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[inline]
 pub fn is_windows() -> bool {
-  *BUILD_OS == Os::Windows
+  &*NODE_PROCESS_PLATFORM == "win32"
 }
 
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-#[wasm_bindgen]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Os {
-  Windows = "windows",
-  Darwin = "darwin",
-}
+// Removed Os enum - using NODE_PROCESS_PLATFORM directly
 
 fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
   use wasm_bindgen::JsCast;
 
-  // Check if the error is a Deno.errors.NotFound
+  // Check if the error is a Node.js Error object
   if let Some(error_obj) = js_value.dyn_ref::<js_sys::Error>() {
     let error_name = error_obj.name();
+    let message = error_obj
+      .message()
+      .as_string()
+      .unwrap_or_else(|| "Unknown error".to_string());
 
-    let maybe_kind = if error_name == "NotFound" {
+    // Check for Node.js error codes in the error object
+    let error_code =
+      js_sys::Reflect::get(&js_value, &JsValue::from_str("code"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .or_else(|| {
+          // Also try 'errno' property
+          js_sys::Reflect::get(&js_value, &JsValue::from_str("errno"))
+            .ok()
+            .and_then(|v| v.as_string())
+        });
+
+    let maybe_kind = if let Some(code) = error_code {
+      match code.as_str() {
+        "ENOENT" => Some(ErrorKind::NotFound),
+        "EEXIST" => Some(ErrorKind::AlreadyExists),
+        "EACCES" | "EPERM" => Some(ErrorKind::PermissionDenied),
+        "EISDIR" => Some(ErrorKind::InvalidInput),
+        "ENOTDIR" => Some(ErrorKind::NotFound),
+        "ENOSPC" => Some(ErrorKind::StorageFull),
+        "EMFILE" | "ENFILE" => Some(ErrorKind::Other), // Too many open files
+        "ENOTSUP" | "EOPNOTSUPP" => Some(ErrorKind::Unsupported),
+        "ETIMEDOUT" => Some(ErrorKind::TimedOut),
+        "ECONNREFUSED" => Some(ErrorKind::ConnectionRefused),
+        "ECONNRESET" => Some(ErrorKind::ConnectionReset),
+        "ECONNABORTED" => Some(ErrorKind::ConnectionAborted),
+        "EADDRINUSE" => Some(ErrorKind::AddrInUse),
+        "EADDRNOTAVAIL" => Some(ErrorKind::AddrNotAvailable),
+        "EBADF" => Some(ErrorKind::InvalidInput),
+        "EINVAL" => Some(ErrorKind::InvalidInput),
+        "ELOOP" => Some(ErrorKind::InvalidInput),
+        "ENAMETOOLONG" => Some(ErrorKind::InvalidInput),
+        "EROFS" => Some(ErrorKind::PermissionDenied),
+        // Add any other Node.js specific error codes as needed
+        _ => None,
+      }
+    } else if error_name == "NotFound" {
       Some(ErrorKind::NotFound)
     } else if error_name == "AlreadyExists" {
       Some(ErrorKind::AlreadyExists)
     } else if error_name == "NotSupported" {
       Some(ErrorKind::Unsupported)
     } else {
-      None
+      // If no error code, try to infer from message
+      if message.contains("file already exists") || message.contains("EEXIST") {
+        Some(ErrorKind::AlreadyExists)
+      } else if message.contains("no such file") || message.contains("ENOENT") {
+        Some(ErrorKind::NotFound)
+      } else if message.contains("permission denied")
+        || message.contains("EACCES")
+        || message.contains("EPERM")
+      {
+        Some(ErrorKind::PermissionDenied)
+      } else {
+        None
+      }
     };
 
     if let Some(error_kind) = maybe_kind {
-      return Error::new(
-        error_kind,
-        error_obj
-          .message()
-          .as_string()
-          .unwrap_or_else(|| "Unknown error".to_string()),
-      );
-    } else if let Some(message) = error_obj.message().as_string() {
+      return Error::new(error_kind, message);
+    } else {
       return Error::new(ErrorKind::Other, message);
     }
   }
