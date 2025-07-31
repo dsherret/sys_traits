@@ -16,6 +16,23 @@ use wasm_bindgen::JsValue;
 
 #[wasm_bindgen(module = "node:fs")]
 extern "C" {
+  #[wasm_bindgen(js_name = Stats)]
+  #[derive(Debug, Clone)]
+  type Stats;
+  #[wasm_bindgen(method, js_name = "isBlockDevice")]
+  fn is_block_device(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isCharacterDevice")]
+  fn is_character_device(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isDirectory")]
+  fn is_directory(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isFile")]
+  fn is_file(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isSocket")]
+  fn is_socket(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isSymbolicLink")]
+  fn is_symbolic_link(this: &Stats) -> bool;
+  #[wasm_bindgen(method, js_name = "isFIFO")]
+  fn is_fifo(this: &Stats) -> bool;
   #[wasm_bindgen(js_name = chmodSync, catch)]
   fn node_chmod_sync(path: &str, mode: u32)
     -> std::result::Result<(), JsValue>;
@@ -27,11 +44,11 @@ extern "C" {
   #[wasm_bindgen(js_name = linkSync, catch)]
   fn node_link_sync(src: &str, dst: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_name = lstatSync, catch)]
-  fn node_lstat_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  fn node_lstat_sync(path: &str) -> std::result::Result<Stats, JsValue>;
   #[wasm_bindgen(js_name = mkdirSync, catch)]
   fn node_mkdir_sync(
     path: &str,
-    options: &JsValue,
+    options: JsValue,
   ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_name = openSync, catch)]
   fn node_open_sync(
@@ -57,13 +74,18 @@ extern "C" {
     path: &str,
     options: &JsValue,
   ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_name = rmdirSync, catch)]
+  fn node_rmdir_sync(
+    path: &str,
+    options: &JsValue,
+  ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_name = renameSync, catch)]
   fn node_rename_sync(
     oldpath: &str,
     newpath: &str,
   ) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_name = statSync, catch)]
-  fn node_stat_sync(path: &str) -> std::result::Result<JsValue, JsValue>;
+  fn node_stat_sync(path: &str) -> std::result::Result<Stats, JsValue>;
   #[wasm_bindgen(js_name = symlinkSync, catch)]
   fn node_symlink_sync(
     target: &str,
@@ -103,7 +125,7 @@ extern "C" {
   ) -> std::result::Result<u32, JsValue>;
 
   #[wasm_bindgen(js_name = fstatSync, catch)]
-  fn node_fstat_sync(fd: i32) -> std::result::Result<JsValue, JsValue>;
+  fn node_fstat_sync(fd: i32) -> std::result::Result<Stats, JsValue>;
   #[wasm_bindgen(js_name = ftruncateSync, catch)]
   fn node_ftruncate_sync(fd: i32, len: u32)
     -> std::result::Result<(), JsValue>;
@@ -122,8 +144,8 @@ extern "C" {
   #[wasm_bindgen(js_name = chownSync, catch)]
   fn node_chown_sync(
     path: &str,
-    uid: Option<u32>,
-    gid: Option<u32>,
+    uid: u32,
+    gid: u32,
   ) -> std::result::Result<(), JsValue>;
 }
 
@@ -136,9 +158,9 @@ extern "C" {
   #[wasm_bindgen(js_name = umask, catch)]
   fn node_process_umask(mask: Option<u32>)
     -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(getter, js_name = env)]
+  #[wasm_bindgen(js_name = env)]
   static NODE_PROCESS_ENV: JsValue;
-  #[wasm_bindgen(getter, js_name = platform)]
+  #[wasm_bindgen(js_name = platform)]
   static NODE_PROCESS_PLATFORM: String;
 }
 
@@ -152,7 +174,6 @@ extern "C" {
 #[wasm_bindgen(inline_js = r#"
 export function polyfill_file_lock(fd, exclusive) {
   // This is a no-op polyfill since Node.js doesn't have built-in file locking
-  // In a real implementation, you might use a third-party library like 'proper-lockfile'
   return Promise.resolve();
 }
 
@@ -319,6 +340,17 @@ impl BaseFsChown for RealSys {
     uid: Option<u32>,
     gid: Option<u32>,
   ) -> Result<()> {
+    let (uid, gid) = match (uid, gid) {
+      (Some(uid), Some(gid)) => (uid, gid),
+      (None, None) => {
+        return Ok(());
+      }
+      (None, Some(_)) | (Some(_), None) => {
+        let stats = self.base_fs_metadata(path)?;
+        (uid.unwrap_or(stats.uid()?), gid.unwrap_or(stats.gid()?))
+      }
+    };
+
     node_chown_sync(&wasm_path_to_str(path), uid, gid)
       .map_err(js_value_to_io_error)
   }
@@ -369,25 +401,13 @@ impl BaseFsCreateDir for RealSys {
   ) -> Result<()> {
     let path_str = wasm_path_to_str(path);
 
-    // Create the options object for mkdirSync
-    let js_options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("recursive"),
-      &JsValue::from_bool(options.recursive),
-    )
-    .map_err(|e| js_value_to_io_error(e))?;
-    if let Some(mode) = options.mode {
-      js_sys::Reflect::set(
-        &js_options,
-        &JsValue::from_str("mode"),
-        &mode.into(),
-      )
-      .map_err(|e| js_value_to_io_error(e))?;
-    }
+    let wasm_options = ObjectBuilder::new()
+      .field_from("recursive", options.recursive)
+      .field_from("mode", options.mode.unwrap_or(0o777))
+      .build();
 
     // Call the Node.js fs.mkdirSync function
-    node_mkdir_sync(&path_str, &JsValue::from(js_options))
+    node_mkdir_sync(&path_str, wasm_options)
       .map_err(|e| js_value_to_io_error(e))
   }
 }
@@ -411,56 +431,20 @@ impl BaseFsCreateJunction for RealSys {
   }
 }
 
-impl From<&JsValue> for FileType {
-  fn from(value: &JsValue) -> Self {
-    use wasm_bindgen::JsCast;
-
+impl From<&Stats> for FileType {
+  fn from(value: &Stats) -> Self {
     // Node.js Stats objects have methods like isFile(), isDirectory(), etc.
-    let is_file_fn = js_sys::Reflect::get(value, &JsValue::from_str("isFile"))
-      .ok()
-      .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
 
-    if let Some(is_file_fn) = is_file_fn {
-      let is_file =
-        js_sys::Reflect::apply(&is_file_fn, value, &js_sys::Array::new())
-          .ok()
-          .and_then(|v| v.as_bool())
-          .unwrap_or(false);
-      if is_file {
-        return FileType::File;
-      }
+    if value.is_file() {
+      return FileType::File;
     }
 
-    let is_directory_fn =
-      js_sys::Reflect::get(value, &JsValue::from_str("isDirectory"))
-        .ok()
-        .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
-
-    if let Some(is_directory_fn) = is_directory_fn {
-      let is_directory =
-        js_sys::Reflect::apply(&is_directory_fn, value, &js_sys::Array::new())
-          .ok()
-          .and_then(|v| v.as_bool())
-          .unwrap_or(false);
-      if is_directory {
-        return FileType::Dir;
-      }
+    if value.is_directory() {
+      return FileType::Dir;
     }
 
-    let is_symlink_fn =
-      js_sys::Reflect::get(value, &JsValue::from_str("isSymbolicLink"))
-        .ok()
-        .and_then(|v| v.dyn_into::<js_sys::Function>().ok());
-
-    if let Some(is_symlink_fn) = is_symlink_fn {
-      let is_symlink =
-        js_sys::Reflect::apply(&is_symlink_fn, value, &js_sys::Array::new())
-          .ok()
-          .and_then(|v| v.as_bool())
-          .unwrap_or(false);
-      if is_symlink {
-        return FileType::Symlink;
-      }
+    if value.is_symbolic_link() {
+      return FileType::Symlink;
     }
 
     FileType::Unknown
@@ -468,7 +452,7 @@ impl From<&JsValue> for FileType {
 }
 
 #[derive(Debug, Clone)]
-pub struct WasmMetadata(JsValue);
+pub struct WasmMetadata(Stats);
 
 impl FsMetadataValue for WasmMetadata {
   fn file_type(&self) -> FileType {
@@ -536,19 +520,19 @@ impl FsMetadataValue for WasmMetadata {
   }
 
   fn is_block_device(&self) -> Result<bool> {
-    parse_bool_prop(&self.0, "isBlockDevice")
+    Ok(self.0.is_block_device())
   }
 
   fn is_char_device(&self) -> Result<bool> {
-    parse_bool_prop(&self.0, "isCharDevice")
+    Ok(self.0.is_character_device())
   }
 
   fn is_fifo(&self) -> Result<bool> {
-    parse_bool_prop(&self.0, "isFifo")
+    Ok(self.0.is_fifo())
   }
 
   fn is_socket(&self) -> Result<bool> {
-    parse_bool_prop(&self.0, "isSocket")
+    Ok(self.0.is_socket())
   }
 
   fn file_attributes(&self) -> Result<u32> {
@@ -573,25 +557,6 @@ fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {
     Err(Error::new(ErrorKind::Other, format!("{} not found", prop)))
   } else {
     Err(Error::new(ErrorKind::Other, format!("{} not a date", prop)))
-  }
-}
-
-fn parse_bool_prop(value: &JsValue, prop: &'static str) -> Result<bool> {
-  let m = get_prop(value, prop)?;
-  if let Some(bool) = m.as_bool() {
-    Ok(bool)
-  } else if m.is_null() {
-    Err(Error::new(
-      ErrorKind::Unsupported,
-      format!("{} not supported", prop),
-    ))
-  } else if m.is_undefined() {
-    Err(Error::new(ErrorKind::Other, format!("{} not found", prop)))
-  } else {
-    Err(Error::new(
-      ErrorKind::Other,
-      format!("Property '{}' is not a boolean", prop),
-    ))
   }
 }
 
@@ -673,30 +638,6 @@ fn get_prop(value: &JsValue, prop: &'static str) -> Result<JsValue> {
   })
 }
 
-#[wasm_bindgen]
-extern "C" {
-  // Use `js_namespace` here to bind `console.log(..)` instead of just
-  // `log(..)`
-  #[wasm_bindgen(js_namespace = console)]
-  fn log(s: &str);
-
-  // The `console.log` is quite polymorphic, so we can bind it with multiple
-  // signatures. Note that we need to use `js_name` to ensure we always call
-  // `log` in JS.
-  #[wasm_bindgen(js_namespace = console, js_name = log)]
-  fn log_u32(a: u32);
-
-  // Multiple arguments too!
-  #[wasm_bindgen(js_namespace = console, js_name = log)]
-  fn log_many(a: &str, b: &str);
-}
-
-macro_rules! console_log {
-    // Note that this is using the `log` function imported above during
-    // `bare_bones`
-    ($($t:tt)*) => (log(&format_args!($($t)*).to_string()))
-}
-
 impl BaseFsMetadata for RealSys {
   type Metadata = WasmMetadata;
 
@@ -737,6 +678,8 @@ impl BaseFsOpen for RealSys {
     } else if options.write && options.create && options.truncate {
       "w"
     } else if options.write && options.create {
+      // TODO: this should really create the file, but
+      // i don't think there's a mode that does write + create + no append + no truncate.
       "r+"
     } else if options.write {
       "r+"
@@ -745,12 +688,6 @@ impl BaseFsOpen for RealSys {
     };
 
     let mode = options.mode;
-    console_log!(
-      "Opening file: {} with flags: {} and mode: {}",
-      s,
-      flags,
-      mode.unwrap_or(0o666)
-    );
     let fd = node_open_sync(&s, flags, mode).map_err(js_value_to_io_error)?;
 
     // Set initial position based on flags
@@ -790,6 +727,29 @@ impl BaseFsRead for RealSys {
   }
 }
 
+#[derive(Debug, Clone)]
+pub struct ObjectBuilder {
+  object: js_sys::Object,
+}
+
+impl ObjectBuilder {
+  pub fn new() -> Self {
+    Self {
+      object: js_sys::Object::new(),
+    }
+  }
+
+  pub fn field_from<V: Into<JsValue>>(self, name: &str, value: V) -> Self {
+    js_sys::Reflect::set(&self.object, &JsValue::from_str(name), &value.into())
+      .unwrap();
+    self
+  }
+
+  pub fn build(self) -> JsValue {
+    self.object.into()
+  }
+}
+
 impl BaseFsReadDir for RealSys {
   type ReadDirEntry = WasmFsDirEntry;
 
@@ -801,17 +761,12 @@ impl BaseFsReadDir for RealSys {
   > {
     let path_str = wasm_path_to_str(path);
 
-    // Configure readdir with withFileTypes option
-    let js_options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &js_options,
-      &JsValue::from_str("withFileTypes"),
-      &JsValue::from_bool(true),
-    )
-    .map_err(js_value_to_io_error)?;
+    let wasm_options = ObjectBuilder::new()
+      .field_from("withFileTypes", true)
+      .build();
 
     // Use Node.js fs.readdirSync to get directory entries
-    let entries = node_readdir_sync(&path_str, &js_options)
+    let entries = node_readdir_sync(&path_str, &JsValue::from(wasm_options))
       .map_err(js_value_to_io_error)?;
 
     let path = path.to_path_buf();
@@ -926,34 +881,19 @@ impl FsDirEntry for WasmFsDirEntry {
 impl BaseFsRemoveDir for RealSys {
   fn base_fs_remove_dir(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
-    let options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &options,
-      &JsValue::from_str("recursive"),
-      &JsValue::from_bool(false),
-    )
-    .map_err(js_value_to_io_error)?;
-    node_rm_sync(&s, &options).map_err(js_value_to_io_error)
+    let options = ObjectBuilder::new().build();
+    node_rmdir_sync(&s, &JsValue::from(options)).map_err(js_value_to_io_error)
   }
 }
 
 impl BaseFsRemoveDirAll for RealSys {
   fn base_fs_remove_dir_all(&self, path: &Path) -> std::io::Result<()> {
     let s = wasm_path_to_str(path);
-    let options = js_sys::Object::new();
-    js_sys::Reflect::set(
-      &options,
-      &JsValue::from_str("recursive"),
-      &JsValue::from_bool(true),
-    )
-    .map_err(js_value_to_io_error)?;
-    js_sys::Reflect::set(
-      &options,
-      &JsValue::from_str("force"),
-      &JsValue::from_bool(true),
-    )
-    .map_err(js_value_to_io_error)?;
-    node_rm_sync(&s, &options).map_err(js_value_to_io_error)
+    let options = ObjectBuilder::new()
+      .field_from("recursive", true)
+      .field_from("force", true)
+      .build();
+    node_rm_sync(&s, &JsValue::from(options)).map_err(js_value_to_io_error)
   }
 }
 
@@ -1070,6 +1010,7 @@ impl BaseFsWrite for RealSys {
 #[derive(Debug)]
 pub struct WasmFile {
   fd: i32,
+  #[allow(dead_code)]
   path: String,
   position: u64,
 }
@@ -1173,12 +1114,9 @@ impl FsFileSyncData for WasmFile {
 
 impl std::io::Seek for WasmFile {
   fn seek(&mut self, pos: std::io::SeekFrom) -> Result<u64> {
-    console_log!("Current position: {}", self.position);
-    console_log!("SeekFrom: {:?}", pos);
     let new_position = match pos {
       std::io::SeekFrom::Start(offset) => offset,
       std::io::SeekFrom::End(offset) => {
-        console_log!("SeekFrom::End({})", offset);
         // We need to get file size first
         let metadata =
           node_fstat_sync(self.fd).map_err(js_value_to_io_error)?;
@@ -1186,14 +1124,12 @@ impl std::io::Seek for WasmFile {
           .map_err(js_value_to_io_error)?
           .as_f64()
           .unwrap_or(0.0) as u64;
-        console_log!("File size: {}", size);
         (size as i64 + offset) as u64
       }
       std::io::SeekFrom::Current(offset) => {
         (self.position as i64 + offset) as u64
       }
     };
-    console_log!("New position: {}", new_position);
     self.position = new_position;
     Ok(new_position)
   }
@@ -1201,8 +1137,6 @@ impl std::io::Seek for WasmFile {
 
 impl std::io::Write for WasmFile {
   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-    console_log!("Current position: {}", self.position);
-    console_log!("Writing buffer: {:?}", buf);
     let bytes_written = node_write_sync(
       self.fd,
       buf,
@@ -1216,7 +1150,6 @@ impl std::io::Write for WasmFile {
   }
 
   fn flush(&mut self) -> std::io::Result<()> {
-    console_log!("Flushing file: {}", self.path);
     node_fsync_sync(self.fd).map_err(js_value_to_io_error)
   }
 }
