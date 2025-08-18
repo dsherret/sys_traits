@@ -158,9 +158,9 @@ extern "C" {
   #[wasm_bindgen(js_name = umask, catch)]
   fn node_process_umask(mask: Option<u32>)
     -> std::result::Result<u32, JsValue>;
-  #[wasm_bindgen(js_name = env)]
+  #[wasm_bindgen(js_name = env, thread_local_v2)]
   static NODE_PROCESS_ENV: JsValue;
-  #[wasm_bindgen(js_name = platform)]
+  #[wasm_bindgen(js_name = platform, thread_local_v2)]
   static NODE_PROCESS_PLATFORM: String;
 }
 
@@ -225,10 +225,11 @@ impl BaseEnvSetCurrentDir for RealSys {
 impl BaseEnvVar for RealSys {
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     let key = key.to_str()?;
-    let env_obj = &NODE_PROCESS_ENV;
-    let js_key = JsValue::from_str(key);
-    let value = js_sys::Reflect::get(env_obj, &js_key).ok()?;
-    value.as_string().map(OsString::from)
+    NODE_PROCESS_ENV.with(|env_obj| {
+      let js_key = JsValue::from_str(key);
+      let value = js_sys::Reflect::get(env_obj, &js_key).ok()?;
+      value.as_string().map(OsString::from)
+    })
   }
 }
 
@@ -236,10 +237,11 @@ impl BaseEnvSetVar for RealSys {
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     let key = key.to_str().unwrap();
     let value = value.to_str().unwrap();
-    let env_obj = &NODE_PROCESS_ENV;
-    let js_key = JsValue::from_str(key);
-    let js_value = JsValue::from_str(value);
-    js_sys::Reflect::set(env_obj, &js_key, &js_value).unwrap();
+    NODE_PROCESS_ENV.with(|env_obj| {
+      let js_key = JsValue::from_str(key);
+      let js_value = JsValue::from_str(value);
+      js_sys::Reflect::set(env_obj, &js_key, &js_value).unwrap();
+    })
   }
 }
 
@@ -275,7 +277,7 @@ impl EnvCacheDir for RealSys {
       self
         .env_var_path("USERPROFILE")
         .map(|dir| dir.join("AppData/Local"))
-    } else if &*NODE_PROCESS_PLATFORM == "darwin" {
+    } else if NODE_PROCESS_PLATFORM.with(|env| env == "darwin") {
       self.env_home_dir().map(|h| h.join("Library/Caches"))
     } else {
       self
@@ -580,6 +582,10 @@ fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {
 }
 
 fn parse_u32_prop(value: &JsValue, prop: &'static str) -> Result<u32> {
+  if is_windows() {
+    return Err(not_supported_windows(prop));
+  }
+
   let m = get_prop(value, prop)?;
   if let Some(num) = m.as_f64() {
     if num >= 0.0 && num.fract() == 0.0 && num <= u32::MAX as f64 {
@@ -604,6 +610,9 @@ fn parse_u32_prop(value: &JsValue, prop: &'static str) -> Result<u32> {
 }
 
 fn parse_u64_prop(value: &JsValue, prop: &'static str) -> Result<u64> {
+  if is_windows() {
+    return Err(not_supported_windows(prop));
+  }
   let m = get_prop(value, prop)?;
   if let Some(bigint) = m.dyn_ref::<js_sys::BigInt>() {
     if let Some(bigint_f64) = bigint.as_f64() {
@@ -1235,7 +1244,7 @@ impl crate::ThreadSleep for RealSys {
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[inline]
 pub fn is_windows() -> bool {
-  &*NODE_PROCESS_PLATFORM == "win32"
+  NODE_PROCESS_PLATFORM.with(|env| env == "win32")
 }
 
 // Removed Os enum - using NODE_PROCESS_PLATFORM directly
