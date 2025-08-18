@@ -420,13 +420,7 @@ fn run() -> std::io::Result<()> {
     file.fs_file_unlock()?;
     file.fs_file_lock(FsFileLockMode::Exclusive)?;
     file.fs_file_unlock()?;
-    assert_eq!(
-      file
-        .fs_file_try_lock(FsFileLockMode::Shared)
-        .unwrap_err()
-        .kind(),
-      ErrorKind::Unsupported
-    );
+    file.fs_file_try_lock(FsFileLockMode::Shared)?;
   }
 
   // sync_all and sync_data

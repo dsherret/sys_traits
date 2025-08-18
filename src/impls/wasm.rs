@@ -170,28 +170,6 @@ extern "C" {
   fn node_tty_isatty(fd: i32) -> bool;
 }
 
-// Polyfill for file locking - Node.js doesn't have built-in file locking
-#[wasm_bindgen(inline_js = r#"
-export function polyfill_file_lock(fd, exclusive) {
-  // This is a no-op polyfill since Node.js doesn't have built-in file locking
-  return Promise.resolve();
-}
-
-export function polyfill_file_unlock(fd) {
-  // This is a no-op polyfill
-  return Promise.resolve();
-}
-"#)]
-extern "C" {
-  #[wasm_bindgen(js_name = polyfill_file_lock, catch)]
-  fn polyfill_file_lock(
-    fd: i32,
-    exclusive: bool,
-  ) -> std::result::Result<(), JsValue>;
-  #[wasm_bindgen(js_name = polyfill_file_unlock, catch)]
-  fn polyfill_file_unlock(fd: i32) -> std::result::Result<(), JsValue>;
-}
-
 #[wasm_bindgen]
 extern "C" {
   #[wasm_bindgen(js_namespace = ["globalThis", "Date"], js_name = now)]
@@ -267,13 +245,27 @@ impl BaseEnvSetVar for RealSys {
 
 impl EnvUmask for RealSys {
   fn env_umask(&self) -> std::io::Result<u32> {
-    node_process_umask(None).map_err(js_value_to_io_error)
+    if is_windows() {
+      Err(std::io::Error::new(
+        ErrorKind::Unsupported,
+        "umask is not supported on this platform",
+      ))
+    } else {
+      node_process_umask(None).map_err(js_value_to_io_error)
+    }
   }
 }
 
 impl EnvSetUmask for RealSys {
   fn env_set_umask(&self, umask: u32) -> std::io::Result<u32> {
-    node_process_umask(Some(umask)).map_err(js_value_to_io_error)
+    if is_windows() {
+      Err(std::io::Error::new(
+        ErrorKind::Unsupported,
+        "umask is not supported on this platform",
+      ))
+    } else {
+      node_process_umask(Some(umask)).map_err(js_value_to_io_error)
+    }
   }
 }
 
@@ -340,6 +332,10 @@ impl BaseFsChown for RealSys {
     uid: Option<u32>,
     gid: Option<u32>,
   ) -> Result<()> {
+    if is_windows() {
+      return Err(not_supported_windows("fs::chown"));
+    }
+
     let (uid, gid) = match (uid, gid) {
       (Some(uid), Some(gid)) => (uid, gid),
       (None, None) => {
@@ -520,19 +516,35 @@ impl FsMetadataValue for WasmMetadata {
   }
 
   fn is_block_device(&self) -> Result<bool> {
-    Ok(self.0.is_block_device())
+    if is_windows() {
+      Err(not_supported_windows("is_block_device"))
+    } else {
+      Ok(self.0.is_block_device())
+    }
   }
 
   fn is_char_device(&self) -> Result<bool> {
-    Ok(self.0.is_character_device())
+    if is_windows() {
+      Err(not_supported_windows("is_char_device"))
+    } else {
+      Ok(self.0.is_character_device())
+    }
   }
 
   fn is_fifo(&self) -> Result<bool> {
-    Ok(self.0.is_fifo())
+    if is_windows() {
+      Err(not_supported_windows("is_fifo"))
+    } else {
+      Ok(self.0.is_fifo())
+    }
   }
 
   fn is_socket(&self) -> Result<bool> {
-    Ok(self.0.is_socket())
+    if is_windows() {
+      Err(not_supported_windows("is_socket"))
+    } else {
+      Ok(self.0.is_socket())
+    }
   }
 
   fn file_attributes(&self) -> Result<u32> {
@@ -541,6 +553,13 @@ impl FsMetadataValue for WasmMetadata {
       "file_attributes is not supported in Wasm",
     ))
   }
+}
+
+fn not_supported_windows(name: &str) -> std::io::Error {
+  Error::new(
+    ErrorKind::Unsupported,
+    format!("{} is not supported on Windows", name),
+  )
 }
 
 fn parse_date_prop(value: &JsValue, prop: &'static str) -> Result<SystemTime> {
@@ -960,8 +979,15 @@ impl BaseFsSetPermissions for RealSys {
     path: &Path,
     mode: u32,
   ) -> std::io::Result<()> {
-    let path = wasm_path_to_str(path);
-    node_chmod_sync(&path, mode).map_err(js_value_to_io_error)
+    if is_windows() {
+      Err(std::io::Error::new(
+        ErrorKind::Unsupported,
+        "cannot set path permissions on this platform",
+      ))
+    } else {
+      let path = wasm_path_to_str(path);
+      node_chmod_sync(&path, mode).map_err(js_value_to_io_error)
+    }
   }
 }
 
@@ -1033,23 +1059,19 @@ impl FsFileIsTerminal for WasmFile {
 }
 
 impl FsFileLock for WasmFile {
-  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
-    let exclusive = match mode {
-      FsFileLockMode::Shared => false,
-      FsFileLockMode::Exclusive => true,
-    };
-    polyfill_file_lock(self.fd, exclusive).map_err(js_value_to_io_error)
+  fn fs_file_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
+    // no-op because Node.js doesn't support it
+    Ok(())
   }
 
   fn fs_file_try_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
-    Err(Error::new(
-      ErrorKind::Unsupported,
-      "try_lock is not supported in Node.js WASM",
-    ))
+    // no-op because Node.js doesn't support it
+    Ok(())
   }
 
   fn fs_file_unlock(&mut self) -> io::Result<()> {
-    polyfill_file_unlock(self.fd).map_err(js_value_to_io_error)
+    // no-op because Node.js doesn't support it
+    Ok(())
   }
 }
 
@@ -1081,16 +1103,21 @@ impl FsFileSetTimes for WasmFile {
     &mut self,
     file_times: FsFileTimes,
   ) -> std::io::Result<()> {
-    fn err() -> std::io::Error {
-      std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "must provide both accessed and modified times when setting file times in Node.js WASM",
-      )
-    }
-
     let FsFileTimes { accessed, modified } = file_times;
-    let atime = accessed.ok_or_else(|| err())?;
-    let mtime = modified.ok_or_else(|| err())?;
+    let (atime, mtime) = match (accessed, modified) {
+      (Some(atime), Some(mtime)) => (atime, mtime),
+      (Some(atime), None) => {
+        let metadata = self.fs_file_metadata()?;
+        (atime, metadata.modified()?)
+      }
+      (None, Some(mtime)) => {
+        let metadata = self.fs_file_metadata()?;
+        (metadata.accessed()?, mtime)
+      }
+      (None, None) => {
+        return Ok(());
+      }
+    };
     let atime_secs = system_time_to_secs(atime)?;
     let mtime_secs = system_time_to_secs(mtime)?;
     node_futimes_sync(self.fd, atime_secs, mtime_secs)
