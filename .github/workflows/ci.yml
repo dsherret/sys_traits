@@ -68,8 +68,11 @@ jobs:
       - name: Test
         run: cargo test --all-targets --features real,memory,getrandom,strip_unc,winapi,libc
 
-      - name: Test (Wasm)
+      - name: Test (Deno Wasm)
         run: deno task test
+
+      - name: Test (Node.js Wasm)
+        run: node --experimental-wasm-modules tests/wasm_test/run.js
 
       - name: Publish
         if: |
