@@ -248,10 +248,7 @@ impl BaseEnvSetVar for RealSys {
 impl EnvUmask for RealSys {
   fn env_umask(&self) -> std::io::Result<u32> {
     if is_windows() {
-      Err(std::io::Error::new(
-        ErrorKind::Unsupported,
-        "umask is not supported on this platform",
-      ))
+      Err(not_supported_windows("umask"))
     } else {
       node_process_umask(None).map_err(js_value_to_io_error)
     }
@@ -261,10 +258,7 @@ impl EnvUmask for RealSys {
 impl EnvSetUmask for RealSys {
   fn env_set_umask(&self, umask: u32) -> std::io::Result<u32> {
     if is_windows() {
-      Err(std::io::Error::new(
-        ErrorKind::Unsupported,
-        "umask is not supported on this platform",
-      ))
+      Err(not_supported_windows("set_umask"))
     } else {
       node_process_umask(Some(umask)).map_err(js_value_to_io_error)
     }
@@ -431,8 +425,6 @@ impl BaseFsCreateJunction for RealSys {
 
 impl From<&Stats> for FileType {
   fn from(value: &Stats) -> Self {
-    // Node.js Stats objects have methods like isFile(), isDirectory(), etc.
-
     if value.is_file() {
       return FileType::File;
     }
@@ -793,7 +785,6 @@ impl BaseFsReadDir for RealSys {
       .field_from("withFileTypes", true)
       .build();
 
-    // Use Node.js fs.readdirSync to get directory entries
     let entries = node_readdir_sync(&path_str, &JsValue::from(wasm_options))
       .map_err(js_value_to_io_error)?;
 
@@ -838,7 +829,6 @@ impl FsDirEntry for WasmFsDirEntry {
   fn file_type(&self) -> std::io::Result<FileType> {
     use wasm_bindgen::JsCast;
 
-    // Node.js Dirent objects have methods like isFile(), isDirectory(), etc.
     let is_file_fn =
       js_sys::Reflect::get(&self.value, &JsValue::from_str("isFile"))
         .map_err(js_value_to_io_error)?
@@ -888,7 +878,6 @@ impl FsDirEntry for WasmFsDirEntry {
   }
 
   fn metadata(&self) -> std::io::Result<Self::Metadata> {
-    // For Node.js, we need to stat the file to get metadata
     let path = self.path();
     let s = wasm_path_to_str(&path);
     match node_stat_sync(&s) {
@@ -1028,7 +1017,6 @@ fn node_symlink_sync_with_type(
   let target = wasm_path_to_str(original);
   let path = wasm_path_to_str(link);
 
-  // Node.js symlinkSync takes (target, path, type)
   node_symlink_sync(&target, &path, Some(type_str))
     .map_err(js_value_to_io_error)
 }
@@ -1247,8 +1235,6 @@ pub fn is_windows() -> bool {
   NODE_PROCESS_PLATFORM.with(|env| env == "win32")
 }
 
-// Removed Os enum - using NODE_PROCESS_PLATFORM directly
-
 fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
   use wasm_bindgen::JsCast;
 
@@ -1293,7 +1279,6 @@ fn js_value_to_io_error(js_value: wasm_bindgen::JsValue) -> Error {
         "ELOOP" => Some(ErrorKind::InvalidInput),
         "ENAMETOOLONG" => Some(ErrorKind::InvalidInput),
         "EROFS" => Some(ErrorKind::PermissionDenied),
-        // Add any other Node.js specific error codes as needed
         _ => None,
       }
     } else if error_name == "NotFound" {
