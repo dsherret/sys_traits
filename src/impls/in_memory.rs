@@ -1774,6 +1774,15 @@ mod tests {
   }
 
   #[test]
+  fn test_fs_canonicalize_empty() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a/b/c").unwrap();
+    sys.env_set_current_dir("/a/b").unwrap();
+    let result = sys.fs_canonicalize("");
+    assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::NotFound);
+  }
+
+  #[test]
   fn test_sys_random_no_seed() {
     let sys = InMemorySys::default();
     let mut buf1 = [0u8; 8];
