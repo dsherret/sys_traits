@@ -526,6 +526,9 @@ impl EnvSetUmask for InMemorySys {
 
 impl BaseFsCanonicalize for InMemorySys {
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
+    if path.as_os_str().is_empty() {
+      return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+    }
     let inner = self.0.read();
     let path = inner.to_absolute_path(path);
     let (path, _) = inner.lookup_entry(&path)?;
