@@ -251,12 +251,7 @@ fn run() -> std::io::Result<()> {
   }
 
   // permissions
-  if is_windows {
-    let err = sys.fs_set_permissions("file.txt", 0o0777).unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  } else {
-    sys.fs_set_permissions("file.txt", 0o0777).unwrap();
-  }
+  sys.fs_set_permissions("file.txt", 0o0777).unwrap();
 
   // copy file
   sys.fs_copy("file.txt", "copy.txt").unwrap();
@@ -294,19 +289,16 @@ fn run() -> std::io::Result<()> {
     assert!(metadata.modified().is_ok());
     assert!(metadata.dev().is_ok());
     assert!(metadata.mode().is_ok());
+    assert!(metadata.ino().is_ok());
+    assert!(metadata.nlink().is_ok());
+    assert!(metadata.blocks().is_ok());
 
     if is_windows {
-      assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
-      assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(
         metadata.blksize().unwrap_err().kind(),
-        ErrorKind::Unsupported
-      );
-      assert_eq!(
-        metadata.blocks().unwrap_err().kind(),
         ErrorKind::Unsupported
       );
       assert_eq!(
