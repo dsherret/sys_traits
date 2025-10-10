@@ -251,12 +251,7 @@ fn run() -> std::io::Result<()> {
   }
 
   // permissions
-  if is_windows {
-    let err = sys.fs_set_permissions("file.txt", 0o0777).unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  } else {
-    sys.fs_set_permissions("file.txt", 0o0777).unwrap();
-  }
+  sys.fs_set_permissions("file.txt", 0o0777).unwrap();
 
   // copy file
   sys.fs_copy("file.txt", "copy.txt").unwrap();
