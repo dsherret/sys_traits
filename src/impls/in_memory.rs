@@ -526,6 +526,9 @@ impl EnvSetUmask for InMemorySys {
 
 impl BaseFsCanonicalize for InMemorySys {
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
+    if path.as_os_str().is_empty() {
+      return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+    }
     let inner = self.0.read();
     let path = inner.to_absolute_path(path);
     let (path, _) = inner.lookup_entry(&path)?;
@@ -1771,6 +1774,15 @@ mod tests {
     sys.fs_create_dir_all("/absolute").unwrap();
     let abs = sys.fs_canonicalize("/absolute").unwrap();
     assert_eq!(abs, PathBuf::from("/absolute"));
+  }
+
+  #[test]
+  fn test_fs_canonicalize_empty() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a/b/c").unwrap();
+    sys.env_set_current_dir("/a/b").unwrap();
+    let result = sys.fs_canonicalize("");
+    assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::NotFound);
   }
 
   #[test]

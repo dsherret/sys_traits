@@ -1176,4 +1176,10 @@ mod test {
       assert_eq!(result.unwrap_err().kind(), ErrorKind::Unsupported);
     }
   }
+
+  #[test]
+  fn test_fs_canonicalize_empty() {
+    let result = RealSys.fs_canonicalize("");
+    assert_eq!(result.unwrap_err().kind(), ErrorKind::NotFound);
+  }
 }
