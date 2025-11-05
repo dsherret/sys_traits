@@ -175,7 +175,7 @@ extern "C" {
   fn sync_data_sync(this: &DenoFsFile) -> std::result::Result<(), JsValue>;
 
   // Deno.build
-  #[wasm_bindgen(js_namespace = ["Deno", "build"], js_name = os)]
+  #[wasm_bindgen(thread_local_v2, js_namespace = ["Deno", "build"], js_name = os)]
   static BUILD_OS: Os;
 
   // Deno.env
@@ -255,7 +255,7 @@ impl EnvSetUmask for RealSys {
 
 impl EnvCacheDir for RealSys {
   fn env_cache_dir(&self) -> Option<PathBuf> {
-    match *BUILD_OS {
+    match BUILD_OS.with(|v| *v) {
       Os::Windows => self
         .env_var_path("USERPROFILE")
         .map(|dir| dir.join("AppData/Local")),
@@ -1152,7 +1152,7 @@ impl crate::ThreadSleep for RealSys {
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[inline]
 pub fn is_windows() -> bool {
-  *BUILD_OS == Os::Windows
+  BUILD_OS.with(|v| *v) == Os::Windows
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
