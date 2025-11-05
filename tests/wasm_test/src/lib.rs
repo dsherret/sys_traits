@@ -12,6 +12,7 @@ use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
 use sys_traits::EnvProgramsDir;
+use sys_traits::EnvRemoveVar;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetUmask;
 use sys_traits::EnvSetVar;
@@ -104,6 +105,11 @@ fn run() -> std::io::Result<()> {
 
   sys.env_set_var("SYS_TRAITS_TEST", "Value");
   assert_eq!(sys.env_var("SYS_TRAITS_TEST").unwrap(), "Value");
+  sys.env_remove_var("SYS_TRAITS_TEST");
+  assert_eq!(
+    sys.env_var("SYS_TRAITS_TEST").err().unwrap(),
+    std::env::VarError::NotPresent
+  );
 
   // file system
   assert!(sys.fs_exists_no_err(test_dir.join("src")));

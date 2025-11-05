@@ -183,6 +183,8 @@ extern "C" {
   fn deno_env_get(key: &str) -> std::result::Result<Option<String>, JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = set, catch)]
   fn deno_env_set(key: &str, value: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = delete, catch)]
+  fn deno_env_delete(key: &str) -> std::result::Result<(), JsValue>;
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -221,6 +223,13 @@ impl BaseEnvVar for RealSys {
     let key = key.to_str()?;
     let value = deno_env_get(key).ok()?;
     value.map(OsString::from)
+  }
+}
+
+impl BaseEnvRemoveVar for RealSys {
+  fn base_env_remove_var(&self, key: &OsStr) {
+    let key = key.to_str().unwrap();
+    deno_env_delete(key).unwrap();
   }
 }
 

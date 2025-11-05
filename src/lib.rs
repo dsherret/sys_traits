@@ -82,6 +82,21 @@ pub trait EnvVar: BaseEnvVar {
 
 impl<T: BaseEnvVar> EnvVar for T {}
 
+// == EnvRemoveVar ==
+
+pub trait BaseEnvRemoveVar {
+  #[doc(hidden)]
+  fn base_env_remove_var(&self, key: &OsStr);
+}
+
+pub trait EnvRemoveVar: BaseEnvRemoveVar {
+  fn env_set_var(&self, key: impl AsRef<OsStr>) {
+    self.base_env_remove_var(key.as_ref())
+  }
+}
+
+impl<T: BaseEnvRemoveVar> EnvRemoveVar for T {}
+
 // == EnvSetVar ==
 
 pub trait BaseEnvSetVar {
