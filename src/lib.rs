@@ -90,7 +90,7 @@ pub trait BaseEnvRemoveVar {
 }
 
 pub trait EnvRemoveVar: BaseEnvRemoveVar {
-  fn env_set_var(&self, key: impl AsRef<OsStr>) {
+  fn env_remove_var(&self, key: impl AsRef<OsStr>) {
     self.base_env_remove_var(key.as_ref())
   }
 }
