@@ -472,6 +472,12 @@ impl BaseEnvVar for InMemorySys {
   }
 }
 
+impl BaseEnvRemoveVar for InMemorySys {
+  fn base_env_remove_var(&self, key: &OsStr) {
+    self.0.write().envs.remove(key);
+  }
+}
+
 impl BaseEnvSetVar for InMemorySys {
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
     self
