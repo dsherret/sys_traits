@@ -102,6 +102,14 @@ impl DirectoryEntry {
     }
   }
 
+  fn mode(&self) -> u32 {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().mode,
+      DirectoryEntry::Directory(d) => d.inner.read().mode,
+      DirectoryEntry::Symlink(s) => s.inner.read().mode,
+    }
+  }
+
   fn set_filetimes(&self, atime: SystemTime, mtime: SystemTime) {
     match self {
       DirectoryEntry::Directory(entry) => {
@@ -135,6 +143,7 @@ struct SymlinkInner {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 #[derive(Debug)]
@@ -150,6 +159,7 @@ struct DirectoryInner {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 #[derive(Debug)]
@@ -361,6 +371,7 @@ impl InMemorySysInner {
                 changed: time,
                 created: time,
                 modified: time,
+                mode: 0o755,
               }),
               entries: vec![],
             };
@@ -646,6 +657,7 @@ pub struct InMemoryMetadata {
   changed: SystemTime,
   created: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 macro_rules! not_supported_metadata_prop {
@@ -691,9 +703,13 @@ impl FsMetadataValue for InMemoryMetadata {
     Ok(self.modified)
   }
 
+  #[inline]
+  fn mode(&self) -> Result<u32> {
+    Ok(self.mode)
+  }
+
   not_supported_metadata_prop!(dev, u64);
   not_supported_metadata_prop!(ino, u64);
-  not_supported_metadata_prop!(mode, u32);
   not_supported_metadata_prop!(nlink, u64);
   not_supported_metadata_prop!(uid, u32);
   not_supported_metadata_prop!(gid, u32);
@@ -721,6 +737,7 @@ impl BaseFsMetadata for InMemorySys {
       changed: entry.changed(),
       created: entry.created(),
       modified: entry.modified(),
+      mode: entry.mode(),
     })
   }
 
@@ -745,6 +762,7 @@ impl BaseFsMetadata for InMemorySys {
           changed: inner.changed,
           created: inner.created,
           modified: inner.modified,
+          mode: inner.mode,
         })
       }
       LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadata {
@@ -754,6 +772,7 @@ impl BaseFsMetadata for InMemorySys {
         changed: entry.changed(),
         created: entry.created(),
         modified: entry.modified(),
+        mode: entry.mode(),
       }),
     }
   }
@@ -922,6 +941,7 @@ pub struct InMemoryDirEntry {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 impl InMemoryDirEntry {
@@ -935,6 +955,7 @@ impl InMemoryDirEntry {
       changed: entry.changed(),
       created: entry.created(),
       modified: entry.modified(),
+      mode: entry.mode(),
     }
   }
 }
@@ -958,6 +979,7 @@ impl FsDirEntry for InMemoryDirEntry {
       created: self.created,
       changed: self.changed,
       modified: self.modified,
+      mode: self.mode,
     })
   }
 
@@ -1234,8 +1256,25 @@ impl BaseFsSetPermissions for InMemorySys {
     path: &Path,
     mode: u32,
   ) -> std::io::Result<()> {
-    let mut file = self.base_fs_open(path, &OpenOptions::new_write())?;
-    file.fs_file_set_permissions(mode)
+    let inner = self.0.read();
+    let path = inner.to_absolute_path(path);
+    let (_, entry) = inner.lookup_entry(&path)?;
+
+    match entry {
+      DirectoryEntry::File(f) => {
+        let mut inner = f.inner.write();
+        inner.mode = mode;
+      }
+      DirectoryEntry::Directory(d) => {
+        let mut inner = d.inner.write();
+        inner.mode = mode;
+      }
+      DirectoryEntry::Symlink(s) => {
+        let mut inner = s.inner.write();
+        inner.mode = mode;
+      }
+    }
+    Ok(())
   }
 }
 
@@ -1285,6 +1324,7 @@ impl BaseFsSymlinkFile for InMemorySys {
             changed: time,
             created: time,
             modified: time,
+            mode: 0o777,
           }),
         });
         Ok(())
@@ -1300,6 +1340,7 @@ impl BaseFsSymlinkFile for InMemorySys {
               changed: time,
               created: time,
               modified: time,
+              mode: 0o777,
             }),
           }),
         );
@@ -2064,5 +2105,31 @@ mod tests {
     sys.fs_create_dir_all("/test/test").unwrap();
     assert!(sys.fs_remove_dir_all("/test").is_ok());
     assert!(!sys.fs_exists_no_err("/test"));
+  }
+
+  #[test]
+  fn test_set_permissions_all_types() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+
+    // Test file permissions
+    sys.fs_write("/test/file.txt", b"content").unwrap();
+    sys.fs_set_permissions("/test/file.txt", 0o600).unwrap();
+    let metadata = sys.fs_metadata("/test/file.txt").unwrap();
+    assert_eq!(metadata.mode().unwrap(), 0o600);
+
+    // Test directory permissions
+    sys.fs_set_permissions("/test", 0o700).unwrap();
+    let dir_metadata = sys.fs_metadata("/test").unwrap();
+    assert_eq!(dir_metadata.mode().unwrap(), 0o700);
+
+    // Test symlink permissions
+    sys
+      .fs_symlink_file("/test/file.txt", "/test/link.txt")
+      .unwrap();
+    sys.fs_set_permissions("/test/link.txt", 0o755).unwrap();
+    // This follows the symlink, so it changes the target file's mode
+    let file_metadata = sys.fs_metadata("/test/file.txt").unwrap();
+    assert_eq!(file_metadata.mode().unwrap(), 0o755);
   }
 }
