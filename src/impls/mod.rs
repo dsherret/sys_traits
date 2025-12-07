@@ -26,7 +26,11 @@ mod real;
 mod wasm;
 
 #[cfg(feature = "memory")]
+pub use in_memory::InMemoryDirEntry;
+#[cfg(feature = "memory")]
 pub use in_memory::InMemoryFile;
+#[cfg(feature = "memory")]
+pub use in_memory::InMemoryMetadata;
 #[cfg(feature = "memory")]
 pub use in_memory::InMemorySys;
 
