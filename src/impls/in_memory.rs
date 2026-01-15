@@ -427,6 +427,13 @@ impl Default for InMemorySys {
 }
 
 impl InMemorySys {
+  pub fn new_with_cwd(cwd: impl AsRef<Path>) -> Self {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all(cwd.as_ref()).unwrap();
+    sys.env_set_current_dir(cwd.as_ref()).unwrap();
+    sys
+  }
+
   pub fn set_seed(&self, seed: Option<u64>) {
     self.0.write().random_seed = seed;
   }
@@ -2105,6 +2112,15 @@ mod tests {
     sys.fs_create_dir_all("/test/test").unwrap();
     assert!(sys.fs_remove_dir_all("/test").is_ok());
     assert!(!sys.fs_exists_no_err("/test"));
+  }
+
+  #[test]
+  fn test_new_with_cwd() {
+    let cwd = if cfg!(windows) { "C:\\dir" } else { "/dir" };
+
+    let sys = InMemorySys::new_with_cwd(cwd);
+    assert_eq!(sys.env_current_dir().unwrap(), PathBuf::from(cwd));
+    assert!(sys.fs_is_dir(cwd).unwrap());
   }
 
   #[test]
