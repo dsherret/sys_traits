@@ -100,7 +100,7 @@ Use `.with_paths_in_errors()` to wrap operations with context that includes the
 operation name and path:
 
 ```rs
-use sys_traits::SysErrorCtx;
+use sys_traits::PathsInErrorsExt;
 use sys_traits::impls::RealSys;
 
 let sys = RealSys;

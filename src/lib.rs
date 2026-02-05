@@ -18,8 +18,8 @@ pub use sys_traits_macros::auto_impl;
 
 pub use self::ctx::OperationError;
 pub use self::ctx::OperationErrorKind;
-pub use self::ctx::SysCtx;
-pub use self::ctx::SysErrorCtx;
+pub use self::ctx::SysWithPathsInErrors;
+pub use self::ctx::PathsInErrorsExt;
 
 use self::boxed::BoxedFsFile;
 use self::boxed::BoxedFsMetadataValue;

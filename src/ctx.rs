@@ -1,12 +1,12 @@
 //! Error context wrapper for sys_traits operations.
 //!
-//! This module provides [`SysCtx`], a wrapper that adds operation and path
+//! This module provides [`SysWithPathsInErrors`], a wrapper that adds operation and path
 //! context to errors returned by sys_traits methods.
 //!
 //! # Example
 //!
 //! ```no_run
-//! use sys_traits::SysErrorCtx;
+//! use sys_traits::PathsInErrorsExt;
 //! # #[cfg(feature = "real")]
 //! use sys_traits::impls::RealSys;
 //!
@@ -107,12 +107,12 @@ pub enum OperationErrorKind {
 
 /// A wrapper that adds error context to sys_traits operations.
 ///
-/// Use [`SysErrorCtx::with_ctx`] to create an instance.
+/// Use [`PathsInErrorsExt::with_paths_in_errors`] to create an instance.
 #[derive(Debug, Clone, Copy)]
-pub struct SysCtx<T>(pub T);
+pub struct SysWithPathsInErrors<T>(pub T);
 
-impl<T> SysCtx<T> {
-  /// Creates a new `SysCtx` wrapper.
+impl<T> SysWithPathsInErrors<T> {
+  /// Creates a new `SysWithPathsInErrors` wrapper.
   pub fn new(inner: T) -> Self {
     Self(inner)
   }
@@ -128,17 +128,17 @@ impl<T> SysCtx<T> {
   }
 }
 
-/// Extension trait that provides the [`with_ctx`](SysErrorCtx::with_ctx) method.
+/// Extension trait that provides the [`with_paths_in_errors`](PathsInErrorsExt::with_paths_in_errors) method.
 ///
 /// Import this trait to use `.with_paths_in_errors()` on any type.
-pub trait SysErrorCtx {
-  /// Wraps `self` in a [`SysCtx`] that includes paths in error messages.
-  fn with_paths_in_errors(&self) -> SysCtx<&Self> {
-    SysCtx(self)
+pub trait PathsInErrorsExt {
+  /// Wraps `self` in a [`SysWithPathsInErrors`] that includes paths in error messages.
+  fn with_paths_in_errors(&self) -> SysWithPathsInErrors<&Self> {
+    SysWithPathsInErrors(self)
   }
 }
 
-impl<T> SysErrorCtx for T {}
+impl<T> PathsInErrorsExt for T {}
 
 // helper to create single-path errors wrapped in io::Error
 fn err_with_path(
@@ -178,7 +178,7 @@ fn err_with_two_paths(
 
 // == FsCanonicalize ==
 
-impl<T: BaseFsCanonicalize> SysCtx<&T> {
+impl<T: BaseFsCanonicalize> SysWithPathsInErrors<&T> {
   pub fn fs_canonicalize(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let path = path.as_ref();
     self
@@ -190,7 +190,7 @@ impl<T: BaseFsCanonicalize> SysCtx<&T> {
 
 // == FsChown ==
 
-impl<T: BaseFsChown> SysCtx<&T> {
+impl<T: BaseFsChown> SysWithPathsInErrors<&T> {
   pub fn fs_chown(
     &self,
     path: impl AsRef<Path>,
@@ -207,7 +207,7 @@ impl<T: BaseFsChown> SysCtx<&T> {
 
 // == FsSymlinkChown ==
 
-impl<T: BaseFsSymlinkChown> SysCtx<&T> {
+impl<T: BaseFsSymlinkChown> SysWithPathsInErrors<&T> {
   pub fn fs_symlink_chown(
     &self,
     path: impl AsRef<Path>,
@@ -224,7 +224,7 @@ impl<T: BaseFsSymlinkChown> SysCtx<&T> {
 
 // == FsCloneFile ==
 
-impl<T: BaseFsCloneFile> SysCtx<&T> {
+impl<T: BaseFsCloneFile> SysWithPathsInErrors<&T> {
   pub fn fs_clone_file(
     &self,
     from: impl AsRef<Path>,
@@ -241,7 +241,7 @@ impl<T: BaseFsCloneFile> SysCtx<&T> {
 
 // == FsCopy ==
 
-impl<T: BaseFsCopy> SysCtx<&T> {
+impl<T: BaseFsCopy> SysWithPathsInErrors<&T> {
   pub fn fs_copy(
     &self,
     from: impl AsRef<Path>,
@@ -258,7 +258,7 @@ impl<T: BaseFsCopy> SysCtx<&T> {
 
 // == FsCreateDir ==
 
-impl<T: BaseFsCreateDir> SysCtx<&T> {
+impl<T: BaseFsCreateDir> SysWithPathsInErrors<&T> {
   pub fn fs_create_dir(
     &self,
     path: impl AsRef<Path>,
@@ -288,7 +288,7 @@ impl<T: BaseFsCreateDir> SysCtx<&T> {
 
 // == FsHardLink ==
 
-impl<T: BaseFsHardLink> SysCtx<&T> {
+impl<T: BaseFsHardLink> SysWithPathsInErrors<&T> {
   pub fn fs_hard_link(
     &self,
     src: impl AsRef<Path>,
@@ -305,7 +305,7 @@ impl<T: BaseFsHardLink> SysCtx<&T> {
 
 // == FsCreateJunction ==
 
-impl<T: BaseFsCreateJunction> SysCtx<&T> {
+impl<T: BaseFsCreateJunction> SysWithPathsInErrors<&T> {
   pub fn fs_create_junction(
     &self,
     original: impl AsRef<Path>,
@@ -322,7 +322,7 @@ impl<T: BaseFsCreateJunction> SysCtx<&T> {
 
 // == FsMetadata ==
 
-impl<T: BaseFsMetadata> SysCtx<&T> {
+impl<T: BaseFsMetadata> SysWithPathsInErrors<&T> {
   pub fn fs_metadata(&self, path: impl AsRef<Path>) -> io::Result<T::Metadata> {
     let path = path.as_ref();
     self
@@ -357,7 +357,7 @@ impl<T: BaseFsMetadata> SysCtx<&T> {
 
 // == FsRead ==
 
-impl<T: BaseFsRead> SysCtx<&T> {
+impl<T: BaseFsRead> SysWithPathsInErrors<&T> {
   pub fn fs_read(
     &self,
     path: impl AsRef<Path>,
@@ -394,7 +394,7 @@ impl<T: BaseFsRead> SysCtx<&T> {
 
 // == FsReadDir ==
 
-impl<T: BaseFsReadDir> SysCtx<&T> {
+impl<T: BaseFsReadDir> SysWithPathsInErrors<&T> {
   pub fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
@@ -409,7 +409,7 @@ impl<T: BaseFsReadDir> SysCtx<&T> {
 
 // == FsReadLink ==
 
-impl<T: BaseFsReadLink> SysCtx<&T> {
+impl<T: BaseFsReadLink> SysWithPathsInErrors<&T> {
   pub fn fs_read_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let path = path.as_ref();
     self
@@ -421,7 +421,7 @@ impl<T: BaseFsReadLink> SysCtx<&T> {
 
 // == FsRemoveDir ==
 
-impl<T: BaseFsRemoveDir> SysCtx<&T> {
+impl<T: BaseFsRemoveDir> SysWithPathsInErrors<&T> {
   pub fn fs_remove_dir(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -433,7 +433,7 @@ impl<T: BaseFsRemoveDir> SysCtx<&T> {
 
 // == FsRemoveDirAll ==
 
-impl<T: BaseFsRemoveDirAll> SysCtx<&T> {
+impl<T: BaseFsRemoveDirAll> SysWithPathsInErrors<&T> {
   pub fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -445,7 +445,7 @@ impl<T: BaseFsRemoveDirAll> SysCtx<&T> {
 
 // == FsRemoveFile ==
 
-impl<T: BaseFsRemoveFile> SysCtx<&T> {
+impl<T: BaseFsRemoveFile> SysWithPathsInErrors<&T> {
   pub fn fs_remove_file(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -457,7 +457,7 @@ impl<T: BaseFsRemoveFile> SysCtx<&T> {
 
 // == FsRename ==
 
-impl<T: BaseFsRename> SysCtx<&T> {
+impl<T: BaseFsRename> SysWithPathsInErrors<&T> {
   pub fn fs_rename(
     &self,
     from: impl AsRef<Path>,
@@ -474,7 +474,7 @@ impl<T: BaseFsRename> SysCtx<&T> {
 
 // == FsSetFileTimes ==
 
-impl<T: BaseFsSetFileTimes> SysCtx<&T> {
+impl<T: BaseFsSetFileTimes> SysWithPathsInErrors<&T> {
   pub fn fs_set_file_times(
     &self,
     path: impl AsRef<Path>,
@@ -491,7 +491,7 @@ impl<T: BaseFsSetFileTimes> SysCtx<&T> {
 
 // == FsSetSymlinkFileTimes ==
 
-impl<T: BaseFsSetSymlinkFileTimes> SysCtx<&T> {
+impl<T: BaseFsSetSymlinkFileTimes> SysWithPathsInErrors<&T> {
   pub fn fs_set_symlink_file_times(
     &self,
     path: impl AsRef<Path>,
@@ -508,7 +508,7 @@ impl<T: BaseFsSetSymlinkFileTimes> SysCtx<&T> {
 
 // == FsSetPermissions ==
 
-impl<T: BaseFsSetPermissions> SysCtx<&T> {
+impl<T: BaseFsSetPermissions> SysWithPathsInErrors<&T> {
   pub fn fs_set_permissions(
     &self,
     path: impl AsRef<Path>,
@@ -524,7 +524,7 @@ impl<T: BaseFsSetPermissions> SysCtx<&T> {
 
 // == FsSymlinkDir ==
 
-impl<T: BaseFsSymlinkDir> SysCtx<&T> {
+impl<T: BaseFsSymlinkDir> SysWithPathsInErrors<&T> {
   pub fn fs_symlink_dir(
     &self,
     original: impl AsRef<Path>,
@@ -541,7 +541,7 @@ impl<T: BaseFsSymlinkDir> SysCtx<&T> {
 
 // == FsSymlinkFile ==
 
-impl<T: BaseFsSymlinkFile> SysCtx<&T> {
+impl<T: BaseFsSymlinkFile> SysWithPathsInErrors<&T> {
   pub fn fs_symlink_file(
     &self,
     original: impl AsRef<Path>,
@@ -558,7 +558,7 @@ impl<T: BaseFsSymlinkFile> SysCtx<&T> {
 
 // == FsWrite ==
 
-impl<T: BaseFsWrite> SysCtx<&T> {
+impl<T: BaseFsWrite> SysWithPathsInErrors<&T> {
   pub fn fs_write(
     &self,
     path: impl AsRef<Path>,
