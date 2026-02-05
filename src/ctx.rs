@@ -41,6 +41,7 @@ use crate::BaseFsCreateDir;
 use crate::BaseFsCreateJunction;
 use crate::BaseFsHardLink;
 use crate::BaseFsMetadata;
+use crate::BaseFsOpen;
 use crate::BaseFsRead;
 use crate::BaseFsReadDir;
 use crate::BaseFsReadLink;
@@ -57,8 +58,23 @@ use crate::BaseFsSymlinkFile;
 use crate::BaseFsWrite;
 use crate::CreateDirOptions;
 use crate::FileType;
+use crate::FsFile;
+use crate::FsFileAsRaw;
+use crate::FsFileIsTerminal;
+use crate::FsFileLock;
+use crate::FsFileLockMode;
+use crate::FsFileMetadata;
+use crate::FsFileSetLen;
+use crate::FsFileSetPermissions;
+use crate::FsFileSetTimes;
+use crate::FsFileSyncAll;
+use crate::FsFileSyncData;
+use crate::FsFileTimes;
 use crate::FsMetadataValue;
 use crate::FsRead;
+use crate::OpenOptions;
+
+use crate::boxed::BoxedFsMetadataValue;
 
 /// An error that includes context about the operation that failed.
 #[derive(Debug)]
@@ -139,6 +155,165 @@ pub trait PathsInErrorsExt {
 }
 
 impl<T> PathsInErrorsExt for T {}
+
+/// A file wrapper that includes the path in error messages.
+///
+/// Returned by [`SysWithPathsInErrors::fs_open`].
+#[derive(Debug)]
+pub struct FsFileWithPathsInErrors<F> {
+  file: F,
+  path: PathBuf,
+}
+
+impl<F> FsFileWithPathsInErrors<F> {
+  /// Creates a new file wrapper with path context.
+  pub fn new(file: F, path: PathBuf) -> Self {
+    Self { file, path }
+  }
+
+  /// Returns a reference to the path.
+  pub fn path(&self) -> &Path {
+    &self.path
+  }
+
+  /// Returns a reference to the inner file.
+  pub fn inner(&self) -> &F {
+    &self.file
+  }
+
+  /// Returns a mutable reference to the inner file.
+  pub fn inner_mut(&mut self) -> &mut F {
+    &mut self.file
+  }
+
+  /// Consumes the wrapper and returns the inner file.
+  pub fn into_inner(self) -> F {
+    self.file
+  }
+
+  fn wrap_err(&self, operation: &'static str, err: io::Error) -> io::Error {
+    err_with_path(operation, &self.path, err)
+  }
+}
+
+impl<F: io::Read> io::Read for FsFileWithPathsInErrors<F> {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    self.file.read(buf).map_err(|e| self.wrap_err("read", e))
+  }
+}
+
+impl<F: io::Write> io::Write for FsFileWithPathsInErrors<F> {
+  fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    self.file.write(buf).map_err(|e| self.wrap_err("write", e))
+  }
+
+  fn flush(&mut self) -> io::Result<()> {
+    self.file.flush().map_err(|e| self.wrap_err("flush", e))
+  }
+}
+
+impl<F: io::Seek> io::Seek for FsFileWithPathsInErrors<F> {
+  fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+    self.file.seek(pos).map_err(|e| self.wrap_err("seek", e))
+  }
+}
+
+impl<F: FsFileIsTerminal> FsFileIsTerminal for FsFileWithPathsInErrors<F> {
+  fn fs_file_is_terminal(&self) -> bool {
+    self.file.fs_file_is_terminal()
+  }
+}
+
+impl<F: FsFileLock> FsFileLock for FsFileWithPathsInErrors<F> {
+  fn fs_file_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
+    self
+      .file
+      .fs_file_lock(mode)
+      .map_err(|e| self.wrap_err("lock", e))
+  }
+
+  fn fs_file_try_lock(&mut self, mode: FsFileLockMode) -> io::Result<()> {
+    self
+      .file
+      .fs_file_try_lock(mode)
+      .map_err(|e| self.wrap_err("try lock", e))
+  }
+
+  fn fs_file_unlock(&mut self) -> io::Result<()> {
+    self
+      .file
+      .fs_file_unlock()
+      .map_err(|e| self.wrap_err("unlock", e))
+  }
+}
+
+impl<F: FsFileMetadata> FsFileMetadata for FsFileWithPathsInErrors<F> {
+  fn fs_file_metadata(&self) -> io::Result<BoxedFsMetadataValue> {
+    self
+      .file
+      .fs_file_metadata()
+      .map_err(|e| self.wrap_err("stat", e))
+  }
+}
+
+impl<F: FsFileSetPermissions> FsFileSetPermissions for FsFileWithPathsInErrors<F> {
+  fn fs_file_set_permissions(&mut self, mode: u32) -> io::Result<()> {
+    self
+      .file
+      .fs_file_set_permissions(mode)
+      .map_err(|e| self.wrap_err("set permissions", e))
+  }
+}
+
+impl<F: FsFileSetTimes> FsFileSetTimes for FsFileWithPathsInErrors<F> {
+  fn fs_file_set_times(&mut self, times: FsFileTimes) -> io::Result<()> {
+    self
+      .file
+      .fs_file_set_times(times)
+      .map_err(|e| self.wrap_err("set file times", e))
+  }
+}
+
+impl<F: FsFileSetLen> FsFileSetLen for FsFileWithPathsInErrors<F> {
+  fn fs_file_set_len(&mut self, size: u64) -> io::Result<()> {
+    self
+      .file
+      .fs_file_set_len(size)
+      .map_err(|e| self.wrap_err("truncate", e))
+  }
+}
+
+impl<F: FsFileSyncAll> FsFileSyncAll for FsFileWithPathsInErrors<F> {
+  fn fs_file_sync_all(&mut self) -> io::Result<()> {
+    self
+      .file
+      .fs_file_sync_all()
+      .map_err(|e| self.wrap_err("sync", e))
+  }
+}
+
+impl<F: FsFileSyncData> FsFileSyncData for FsFileWithPathsInErrors<F> {
+  fn fs_file_sync_data(&mut self) -> io::Result<()> {
+    self
+      .file
+      .fs_file_sync_data()
+      .map_err(|e| self.wrap_err("sync data", e))
+  }
+}
+
+impl<F: FsFileAsRaw> FsFileAsRaw for FsFileWithPathsInErrors<F> {
+  #[cfg(windows)]
+  fn fs_file_as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+    self.file.fs_file_as_raw_handle()
+  }
+
+  #[cfg(unix)]
+  fn fs_file_as_raw_fd(&self) -> Option<std::os::fd::RawFd> {
+    self.file.fs_file_as_raw_fd()
+  }
+}
+
+impl<F: FsFile> FsFile for FsFileWithPathsInErrors<F> {}
 
 // helper to create single-path errors wrapped in io::Error
 fn err_with_path(
@@ -352,6 +527,23 @@ impl<T: BaseFsMetadata> SysWithPathsInErrors<&T> {
 
   pub fn fs_is_symlink(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_symlink_metadata(path)?.file_type() == FileType::Symlink)
+  }
+}
+
+// == FsOpen ==
+
+impl<T: BaseFsOpen> SysWithPathsInErrors<&T> {
+  pub fn fs_open(
+    &self,
+    path: impl AsRef<Path>,
+    options: &OpenOptions,
+  ) -> io::Result<FsFileWithPathsInErrors<T::File>> {
+    let path = path.as_ref();
+    let file = self
+      .0
+      .base_fs_open(path, options)
+      .map_err(|e| err_with_path("open", path, e))?;
+    Ok(FsFileWithPathsInErrors::new(file, path.to_path_buf()))
   }
 }
 
@@ -580,6 +772,8 @@ mod tests {
   use crate::FsMetadata;
   use crate::FsRead;
   use crate::FsWrite;
+  use std::io::Read;
+  use std::io::Write;
 
   #[test]
   fn test_error_display_single_path() {
@@ -917,5 +1111,91 @@ mod tests {
         "/link.txt".to_string()
       )
     );
+  }
+
+  #[test]
+  fn test_fs_open_error() {
+    let sys = InMemorySys::default();
+    let err = sys
+      .with_paths_in_errors()
+      .fs_open("/nonexistent", &OpenOptions::default())
+      .unwrap_err();
+    let inner = err.get_ref().unwrap();
+    let op_err = inner.downcast_ref::<OperationError>().unwrap();
+    assert_eq!(op_err.operation(), "open");
+    assert_eq!(
+      op_err.kind(),
+      &OperationErrorKind::WithPath("/nonexistent".to_string())
+    );
+  }
+
+  #[test]
+  fn test_fs_open_success() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys.fs_write("/test.txt", b"hello").unwrap();
+    let mut file = sys
+      .with_paths_in_errors()
+      .fs_open(
+        "/test.txt",
+        &OpenOptions {
+          read: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+    let mut buf = [0u8; 5];
+    file.read_exact(&mut buf).unwrap();
+    assert_eq!(&buf, b"hello");
+  }
+
+  #[test]
+  fn test_fs_file_read_write_success() {
+    let sys = InMemorySys::new_with_cwd("/");
+    // create and write via wrapped file
+    let mut file = sys
+      .with_paths_in_errors()
+      .fs_open(
+        "/test.txt",
+        &OpenOptions {
+          write: true,
+          create: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+    file.write_all(b"hello").unwrap();
+    drop(file);
+
+    // read via wrapped file
+    let mut file = sys
+      .with_paths_in_errors()
+      .fs_open(
+        "/test.txt",
+        &OpenOptions {
+          read: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).unwrap();
+    assert_eq!(&buf, b"hello");
+  }
+
+  #[test]
+  fn test_fs_file_path_accessor() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys.fs_write("/test.txt", b"hello").unwrap();
+    let file = sys
+      .with_paths_in_errors()
+      .fs_open(
+        "/test.txt",
+        &OpenOptions {
+          read: true,
+          ..Default::default()
+        },
+      )
+      .unwrap();
+    assert_eq!(file.path(), Path::new("/test.txt"));
   }
 }
