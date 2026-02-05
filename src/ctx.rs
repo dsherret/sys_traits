@@ -256,7 +256,9 @@ impl<F: FsFileMetadata> FsFileMetadata for FsFileWithPathsInErrors<F> {
   }
 }
 
-impl<F: FsFileSetPermissions> FsFileSetPermissions for FsFileWithPathsInErrors<F> {
+impl<F: FsFileSetPermissions> FsFileSetPermissions
+  for FsFileWithPathsInErrors<F>
+{
   fn fs_file_set_permissions(&mut self, mode: u32) -> io::Result<()> {
     self
       .file
