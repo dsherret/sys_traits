@@ -301,7 +301,7 @@ impl<T: FsDirEntry + 'static> FsDirEntry for MappedMetadataFsDirEntry<T> {
   type Metadata = BoxedFsMetadataValue;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     self.0.file_name()
   }
 
@@ -319,7 +319,7 @@ impl<T: FsDirEntry + 'static> FsDirEntry for MappedMetadataFsDirEntry<T> {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     self.0.path()
   }
 }
@@ -339,7 +339,7 @@ impl FsDirEntry for BoxedFsDirEntry {
   type Metadata = BoxedFsMetadataValue;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     self.0.file_name()
   }
 
@@ -354,7 +354,7 @@ impl FsDirEntry for BoxedFsDirEntry {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     self.0.path()
   }
 }

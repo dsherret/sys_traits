@@ -630,7 +630,7 @@ impl FsDirEntry for RealFsDirEntry {
   type Metadata = RealFsMetadata;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     Cow::Owned(self.0.file_name())
   }
 
@@ -645,7 +645,7 @@ impl FsDirEntry for RealFsDirEntry {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     Cow::Owned(self.0.path())
   }
 }

@@ -970,7 +970,7 @@ impl InMemoryDirEntry {
 impl FsDirEntry for InMemoryDirEntry {
   type Metadata = InMemoryMetadata;
 
-  fn file_name(&self) -> std::borrow::Cow<std::ffi::OsStr> {
+  fn file_name(&self) -> std::borrow::Cow<'_, std::ffi::OsStr> {
     std::borrow::Cow::Owned(self.name.clone().into())
   }
 
@@ -990,7 +990,7 @@ impl FsDirEntry for InMemoryDirEntry {
     })
   }
 
-  fn path(&self) -> std::borrow::Cow<std::path::Path> {
+  fn path(&self) -> std::borrow::Cow<'_, std::path::Path> {
     std::borrow::Cow::Borrowed(self.path.as_ref())
   }
 }

@@ -70,11 +70,14 @@ use crate::FsFileSetTimes;
 use crate::FsFileSyncAll;
 use crate::FsFileSyncData;
 use crate::FsFileTimes;
+use crate::FsMetadata;
 use crate::FsMetadataValue;
 use crate::FsRead;
 use crate::OpenOptions;
 
+use crate::boxed::BoxedFsFile;
 use crate::boxed::BoxedFsMetadataValue;
+use crate::boxed::FsOpenBoxed;
 
 /// An error that includes context about the operation that failed.
 #[derive(Debug)]
@@ -124,22 +127,31 @@ pub enum OperationErrorKind {
 /// A wrapper that adds error context to sys_traits operations.
 ///
 /// Use [`PathsInErrorsExt::with_paths_in_errors`] to create an instance.
-#[derive(Debug, Clone, Copy)]
-pub struct SysWithPathsInErrors<T>(pub T);
+#[derive(Debug)]
+pub struct SysWithPathsInErrors<'a, T: ?Sized>(pub &'a T);
 
-impl<T> SysWithPathsInErrors<T> {
+// These implementations of Clone and Copy are needed in order to get this
+// working when `T` does not implement `Clone` or `Copy`
+impl<'a, T: ?Sized> Copy for SysWithPathsInErrors<'a, T> {}
+
+impl<'a, T: ?Sized> Clone for SysWithPathsInErrors<'a, T> {
+  fn clone(&self) -> Self {
+    Self(self.0)
+  }
+}
+
+impl<'a, T: ?Sized> SysWithPathsInErrors<'a, T> {
   /// Creates a new `SysWithPathsInErrors` wrapper.
-  pub fn new(inner: T) -> Self {
+  pub fn new(inner: &'a T) -> Self {
     Self(inner)
   }
 
   /// Returns a reference to the inner value.
-  pub fn inner(&self) -> &T {
-    &self.0
-  }
-
-  /// Consumes the wrapper and returns the inner value.
-  pub fn into_inner(self) -> T {
+  pub fn as_ref(&self) -> &T {
+    // WARNING: Do not implement deref or anything like that on this struct
+    // because we do not want to accidentally have this being able to be passed
+    // into functions for a trait. That would lead to the error being wrapped
+    // multiple times.
     self.0
   }
 }
@@ -149,12 +161,12 @@ impl<T> SysWithPathsInErrors<T> {
 /// Import this trait to use `.with_paths_in_errors()` on any type.
 pub trait PathsInErrorsExt {
   /// Wraps `self` in a [`SysWithPathsInErrors`] that includes paths in error messages.
-  fn with_paths_in_errors(&self) -> SysWithPathsInErrors<&Self> {
+  fn with_paths_in_errors(&self) -> SysWithPathsInErrors<'_, Self> {
     SysWithPathsInErrors(self)
   }
 }
 
-impl<T> PathsInErrorsExt for T {}
+impl<T: ?Sized> PathsInErrorsExt for T {}
 
 /// A file wrapper that includes the path in error messages.
 ///
@@ -355,7 +367,7 @@ fn err_with_two_paths(
 
 // == FsCanonicalize ==
 
-impl<T: BaseFsCanonicalize> SysWithPathsInErrors<&T> {
+impl<T: BaseFsCanonicalize> SysWithPathsInErrors<'_, T> {
   pub fn fs_canonicalize(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let path = path.as_ref();
     self
@@ -367,7 +379,7 @@ impl<T: BaseFsCanonicalize> SysWithPathsInErrors<&T> {
 
 // == FsChown ==
 
-impl<T: BaseFsChown> SysWithPathsInErrors<&T> {
+impl<T: BaseFsChown> SysWithPathsInErrors<'_, T> {
   pub fn fs_chown(
     &self,
     path: impl AsRef<Path>,
@@ -384,7 +396,7 @@ impl<T: BaseFsChown> SysWithPathsInErrors<&T> {
 
 // == FsSymlinkChown ==
 
-impl<T: BaseFsSymlinkChown> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSymlinkChown> SysWithPathsInErrors<'_, T> {
   pub fn fs_symlink_chown(
     &self,
     path: impl AsRef<Path>,
@@ -401,7 +413,7 @@ impl<T: BaseFsSymlinkChown> SysWithPathsInErrors<&T> {
 
 // == FsCloneFile ==
 
-impl<T: BaseFsCloneFile> SysWithPathsInErrors<&T> {
+impl<T: BaseFsCloneFile> SysWithPathsInErrors<'_, T> {
   pub fn fs_clone_file(
     &self,
     from: impl AsRef<Path>,
@@ -418,7 +430,7 @@ impl<T: BaseFsCloneFile> SysWithPathsInErrors<&T> {
 
 // == FsCopy ==
 
-impl<T: BaseFsCopy> SysWithPathsInErrors<&T> {
+impl<T: BaseFsCopy> SysWithPathsInErrors<'_, T> {
   pub fn fs_copy(
     &self,
     from: impl AsRef<Path>,
@@ -435,7 +447,7 @@ impl<T: BaseFsCopy> SysWithPathsInErrors<&T> {
 
 // == FsCreateDir ==
 
-impl<T: BaseFsCreateDir> SysWithPathsInErrors<&T> {
+impl<T: BaseFsCreateDir> SysWithPathsInErrors<'_, T> {
   pub fn fs_create_dir(
     &self,
     path: impl AsRef<Path>,
@@ -465,7 +477,7 @@ impl<T: BaseFsCreateDir> SysWithPathsInErrors<&T> {
 
 // == FsHardLink ==
 
-impl<T: BaseFsHardLink> SysWithPathsInErrors<&T> {
+impl<T: BaseFsHardLink> SysWithPathsInErrors<'_, T> {
   pub fn fs_hard_link(
     &self,
     src: impl AsRef<Path>,
@@ -482,7 +494,7 @@ impl<T: BaseFsHardLink> SysWithPathsInErrors<&T> {
 
 // == FsCreateJunction ==
 
-impl<T: BaseFsCreateJunction> SysWithPathsInErrors<&T> {
+impl<T: BaseFsCreateJunction> SysWithPathsInErrors<'_, T> {
   pub fn fs_create_junction(
     &self,
     original: impl AsRef<Path>,
@@ -499,7 +511,7 @@ impl<T: BaseFsCreateJunction> SysWithPathsInErrors<&T> {
 
 // == FsMetadata ==
 
-impl<T: BaseFsMetadata> SysWithPathsInErrors<&T> {
+impl<T: BaseFsMetadata> SysWithPathsInErrors<'_, T> {
   pub fn fs_metadata(&self, path: impl AsRef<Path>) -> io::Result<T::Metadata> {
     let path = path.as_ref();
     self
@@ -530,11 +542,35 @@ impl<T: BaseFsMetadata> SysWithPathsInErrors<&T> {
   pub fn fs_is_symlink(&self, path: impl AsRef<Path>) -> io::Result<bool> {
     Ok(self.fs_symlink_metadata(path)?.file_type() == FileType::Symlink)
   }
+
+  pub fn fs_exists(&self, path: impl AsRef<Path>) -> io::Result<bool> {
+    let path = path.as_ref();
+    match self.0.base_fs_exists(path) {
+      Ok(exists) => Ok(exists),
+      Err(e) => Err(err_with_path("stat", path, e)),
+    }
+  }
+
+  pub fn fs_exists_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.0.base_fs_exists_no_err(path.as_ref())
+  }
+
+  pub fn fs_is_file_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.0.fs_is_file_no_err(path)
+  }
+
+  pub fn fs_is_dir_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.0.fs_is_dir_no_err(path)
+  }
+
+  pub fn fs_is_symlink_no_err(&self, path: impl AsRef<Path>) -> bool {
+    self.0.fs_is_symlink_no_err(path)
+  }
 }
 
 // == FsOpen ==
 
-impl<T: BaseFsOpen> SysWithPathsInErrors<&T> {
+impl<T: BaseFsOpen> SysWithPathsInErrors<'_, T> {
   pub fn fs_open(
     &self,
     path: impl AsRef<Path>,
@@ -549,9 +585,26 @@ impl<T: BaseFsOpen> SysWithPathsInErrors<&T> {
   }
 }
 
+// == FsOpenBoxed ==
+
+impl<T: FsOpenBoxed + ?Sized> SysWithPathsInErrors<'_, T> {
+  pub fn fs_open_boxed(
+    &self,
+    path: impl AsRef<Path>,
+    options: &OpenOptions,
+  ) -> io::Result<FsFileWithPathsInErrors<BoxedFsFile>> {
+    let path = path.as_ref();
+    let file = self
+      .0
+      .fs_open_boxed(path, options)
+      .map_err(|e| err_with_path("open", path, e))?;
+    Ok(FsFileWithPathsInErrors::new(file, path.to_path_buf()))
+  }
+}
+
 // == FsRead ==
 
-impl<T: BaseFsRead> SysWithPathsInErrors<&T> {
+impl<T: BaseFsRead> SysWithPathsInErrors<'_, T> {
   pub fn fs_read(
     &self,
     path: impl AsRef<Path>,
@@ -588,7 +641,7 @@ impl<T: BaseFsRead> SysWithPathsInErrors<&T> {
 
 // == FsReadDir ==
 
-impl<T: BaseFsReadDir> SysWithPathsInErrors<&T> {
+impl<T: BaseFsReadDir> SysWithPathsInErrors<'_, T> {
   pub fn fs_read_dir(
     &self,
     path: impl AsRef<Path>,
@@ -603,7 +656,7 @@ impl<T: BaseFsReadDir> SysWithPathsInErrors<&T> {
 
 // == FsReadLink ==
 
-impl<T: BaseFsReadLink> SysWithPathsInErrors<&T> {
+impl<T: BaseFsReadLink> SysWithPathsInErrors<'_, T> {
   pub fn fs_read_link(&self, path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let path = path.as_ref();
     self
@@ -615,7 +668,7 @@ impl<T: BaseFsReadLink> SysWithPathsInErrors<&T> {
 
 // == FsRemoveDir ==
 
-impl<T: BaseFsRemoveDir> SysWithPathsInErrors<&T> {
+impl<T: BaseFsRemoveDir> SysWithPathsInErrors<'_, T> {
   pub fn fs_remove_dir(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -627,7 +680,7 @@ impl<T: BaseFsRemoveDir> SysWithPathsInErrors<&T> {
 
 // == FsRemoveDirAll ==
 
-impl<T: BaseFsRemoveDirAll> SysWithPathsInErrors<&T> {
+impl<T: BaseFsRemoveDirAll> SysWithPathsInErrors<'_, T> {
   pub fn fs_remove_dir_all(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -639,7 +692,7 @@ impl<T: BaseFsRemoveDirAll> SysWithPathsInErrors<&T> {
 
 // == FsRemoveFile ==
 
-impl<T: BaseFsRemoveFile> SysWithPathsInErrors<&T> {
+impl<T: BaseFsRemoveFile> SysWithPathsInErrors<'_, T> {
   pub fn fs_remove_file(&self, path: impl AsRef<Path>) -> io::Result<()> {
     let path = path.as_ref();
     self
@@ -651,7 +704,7 @@ impl<T: BaseFsRemoveFile> SysWithPathsInErrors<&T> {
 
 // == FsRename ==
 
-impl<T: BaseFsRename> SysWithPathsInErrors<&T> {
+impl<T: BaseFsRename> SysWithPathsInErrors<'_, T> {
   pub fn fs_rename(
     &self,
     from: impl AsRef<Path>,
@@ -668,7 +721,7 @@ impl<T: BaseFsRename> SysWithPathsInErrors<&T> {
 
 // == FsSetFileTimes ==
 
-impl<T: BaseFsSetFileTimes> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSetFileTimes> SysWithPathsInErrors<'_, T> {
   pub fn fs_set_file_times(
     &self,
     path: impl AsRef<Path>,
@@ -685,7 +738,7 @@ impl<T: BaseFsSetFileTimes> SysWithPathsInErrors<&T> {
 
 // == FsSetSymlinkFileTimes ==
 
-impl<T: BaseFsSetSymlinkFileTimes> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSetSymlinkFileTimes> SysWithPathsInErrors<'_, T> {
   pub fn fs_set_symlink_file_times(
     &self,
     path: impl AsRef<Path>,
@@ -702,7 +755,7 @@ impl<T: BaseFsSetSymlinkFileTimes> SysWithPathsInErrors<&T> {
 
 // == FsSetPermissions ==
 
-impl<T: BaseFsSetPermissions> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSetPermissions> SysWithPathsInErrors<'_, T> {
   pub fn fs_set_permissions(
     &self,
     path: impl AsRef<Path>,
@@ -718,7 +771,7 @@ impl<T: BaseFsSetPermissions> SysWithPathsInErrors<&T> {
 
 // == FsSymlinkDir ==
 
-impl<T: BaseFsSymlinkDir> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSymlinkDir> SysWithPathsInErrors<'_, T> {
   pub fn fs_symlink_dir(
     &self,
     original: impl AsRef<Path>,
@@ -735,7 +788,7 @@ impl<T: BaseFsSymlinkDir> SysWithPathsInErrors<&T> {
 
 // == FsSymlinkFile ==
 
-impl<T: BaseFsSymlinkFile> SysWithPathsInErrors<&T> {
+impl<T: BaseFsSymlinkFile> SysWithPathsInErrors<'_, T> {
   pub fn fs_symlink_file(
     &self,
     original: impl AsRef<Path>,
@@ -752,7 +805,7 @@ impl<T: BaseFsSymlinkFile> SysWithPathsInErrors<&T> {
 
 // == FsWrite ==
 
-impl<T: BaseFsWrite> SysWithPathsInErrors<&T> {
+impl<T: BaseFsWrite> SysWithPathsInErrors<'_, T> {
   pub fn fs_write(
     &self,
     path: impl AsRef<Path>,
@@ -1199,5 +1252,50 @@ mod tests {
       )
       .unwrap();
     assert_eq!(file.path(), Path::new("/test.txt"));
+  }
+
+  #[test]
+  fn test_fs_exists() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys.fs_write("/test.txt", b"hello").unwrap();
+    assert!(sys.with_paths_in_errors().fs_exists("/test.txt").unwrap());
+    assert!(!sys
+      .with_paths_in_errors()
+      .fs_exists("/nonexistent")
+      .unwrap());
+  }
+
+  #[test]
+  fn test_fs_exists_no_err() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys.fs_write("/test.txt", b"hello").unwrap();
+    assert!(sys.with_paths_in_errors().fs_exists_no_err("/test.txt"));
+    assert!(!sys.with_paths_in_errors().fs_exists_no_err("/nonexistent"));
+  }
+
+  #[test]
+  fn test_fs_is_file_no_err() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys
+      .fs_create_dir("/dir", &CreateDirOptions::default())
+      .unwrap();
+    sys.fs_write("/dir/file.txt", b"hello").unwrap();
+    assert!(sys
+      .with_paths_in_errors()
+      .fs_is_file_no_err("/dir/file.txt"));
+    assert!(!sys.with_paths_in_errors().fs_is_file_no_err("/dir"));
+    assert!(!sys.with_paths_in_errors().fs_is_file_no_err("/nonexistent"));
+  }
+
+  #[test]
+  fn test_fs_is_dir_no_err() {
+    let sys = InMemorySys::new_with_cwd("/");
+    sys
+      .fs_create_dir("/dir", &CreateDirOptions::default())
+      .unwrap();
+    sys.fs_write("/dir/file.txt", b"hello").unwrap();
+    assert!(sys.with_paths_in_errors().fs_is_dir_no_err("/dir"));
+    assert!(!sys.with_paths_in_errors().fs_is_dir_no_err("/dir/file.txt"));
+    assert!(!sys.with_paths_in_errors().fs_is_dir_no_err("/nonexistent"));
   }
 }

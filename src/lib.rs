@@ -798,10 +798,10 @@ impl<T: BaseFsRead> FsRead for T {}
 pub trait FsDirEntry: std::fmt::Debug {
   type Metadata: FsMetadataValue;
 
-  fn file_name(&self) -> Cow<OsStr>;
+  fn file_name(&self) -> Cow<'_, OsStr>;
   fn file_type(&self) -> io::Result<FileType>;
   fn metadata(&self) -> io::Result<Self::Metadata>;
-  fn path(&self) -> Cow<Path>;
+  fn path(&self) -> Cow<'_, Path>;
 }
 
 pub trait BaseFsReadDir {
