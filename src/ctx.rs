@@ -132,11 +132,11 @@ pub struct SysWithPathsInErrors<'a, T: ?Sized>(pub &'a T);
 
 // These implementations of Clone and Copy are needed in order to get this
 // working when `T` does not implement `Clone` or `Copy`
-impl<'a, T: ?Sized> Copy for SysWithPathsInErrors<'a, T> {}
+impl<T: ?Sized> Copy for SysWithPathsInErrors<'_, T> {}
 
-impl<'a, T: ?Sized> Clone for SysWithPathsInErrors<'a, T> {
+impl<T: ?Sized> Clone for SysWithPathsInErrors<'_, T> {
   fn clone(&self) -> Self {
-    Self(self.0)
+    *self
   }
 }
 
@@ -147,6 +147,7 @@ impl<'a, T: ?Sized> SysWithPathsInErrors<'a, T> {
   }
 
   /// Returns a reference to the inner value.
+  #[allow(clippy::should_implement_trait)]
   pub fn as_ref(&self) -> &T {
     // WARNING: Do not implement deref or anything like that on this struct
     // because we do not want to accidentally have this being able to be passed
