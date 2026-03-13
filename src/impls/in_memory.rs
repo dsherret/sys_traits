@@ -494,12 +494,7 @@ impl EnvVars for InMemorySys {
   type EnvVarsOs = std::collections::hash_map::IntoIter<OsString, OsString>;
 
   fn env_vars_os(&self) -> Self::EnvVarsOs {
-    self
-      .0
-      .read()
-      .envs
-      .clone()
-      .into_iter()
+    self.0.read().envs.clone().into_iter()
   }
 }
 
