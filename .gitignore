@@ -1,3 +1,4 @@
+.claude
 .vscode
 /target
 tests/wasm_test/lib
