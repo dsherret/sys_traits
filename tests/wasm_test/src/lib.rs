@@ -19,6 +19,7 @@ use sys_traits::EnvSetVar;
 use sys_traits::EnvTempDir;
 use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
+use sys_traits::EnvVars;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsChown;
@@ -105,11 +106,26 @@ fn run() -> std::io::Result<()> {
 
   sys.env_set_var("SYS_TRAITS_TEST", "Value");
   assert_eq!(sys.env_var("SYS_TRAITS_TEST").unwrap(), "Value");
+
+  // env_vars_os / env_vars
+  {
+    let vars: Vec<_> = sys.env_vars_os().collect();
+    assert!(vars.iter().any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+    let vars: Vec<_> = sys.env_vars().collect();
+    assert!(vars.iter().any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+  }
+
   sys.env_remove_var("SYS_TRAITS_TEST");
   assert_eq!(
     sys.env_var("SYS_TRAITS_TEST").err().unwrap(),
     std::env::VarError::NotPresent
   );
+
+  // env_vars after removal
+  {
+    let vars: Vec<_> = sys.env_vars().collect();
+    assert!(!vars.iter().any(|(k, _)| k == "SYS_TRAITS_TEST"));
+  }
 
   // file system
   assert!(sys.fs_exists_no_err(test_dir.join("src")));
@@ -243,17 +259,15 @@ fn run() -> std::io::Result<()> {
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
   // umask
-  if is_windows {
-    let err = sys.env_umask().unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-    let err = sys.env_set_umask(0o777).unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  } else {
+  {
     let original = sys.env_umask().unwrap();
     let value = sys.env_set_umask(0o777).unwrap();
     assert_eq!(value, original);
     let value = sys.env_set_umask(original).unwrap();
-    assert_eq!(value, 0o0777);
+    // restore returns the previously set value
+    if !is_windows {
+      assert_eq!(value, 0o0777);
+    }
   }
 
   // permissions
