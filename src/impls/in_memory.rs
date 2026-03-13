@@ -491,7 +491,7 @@ impl BaseEnvVar for InMemorySys {
 }
 
 impl EnvVars for InMemorySys {
-  type EnvVarsOs = std::vec::IntoIter<(OsString, OsString)>;
+  type EnvVarsOs = std::collections::hash_map::IntoIter<OsString, OsString>;
 
   fn env_vars_os(&self) -> Self::EnvVarsOs {
     self
@@ -499,8 +499,6 @@ impl EnvVars for InMemorySys {
       .read()
       .envs
       .clone()
-      .into_iter()
-      .collect::<Vec<_>>()
       .into_iter()
   }
 }
