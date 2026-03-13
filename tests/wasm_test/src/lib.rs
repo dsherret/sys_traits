@@ -110,9 +110,13 @@ fn run() -> std::io::Result<()> {
   // env_vars_os / env_vars
   {
     let vars: Vec<_> = sys.env_vars_os().collect();
-    assert!(vars.iter().any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+    assert!(vars
+      .iter()
+      .any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
     let vars: Vec<_> = sys.env_vars().collect();
-    assert!(vars.iter().any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+    assert!(vars
+      .iter()
+      .any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
   }
 
   sys.env_remove_var("SYS_TRAITS_TEST");
