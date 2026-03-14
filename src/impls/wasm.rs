@@ -185,6 +185,8 @@ extern "C" {
   fn deno_env_set(key: &str, value: &str) -> std::result::Result<(), JsValue>;
   #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = delete, catch)]
   fn deno_env_delete(key: &str) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno", "env"], js_name = toObject, catch)]
+  fn deno_env_to_object() -> std::result::Result<JsValue, JsValue>;
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -223,6 +225,25 @@ impl BaseEnvVar for RealSys {
     let key = key.to_str()?;
     let value = deno_env_get(key).ok()?;
     value.map(OsString::from)
+  }
+}
+
+impl EnvVars for RealSys {
+  type EnvVarsOs = std::vec::IntoIter<(OsString, OsString)>;
+
+  fn env_vars_os(&self) -> Self::EnvVarsOs {
+    let obj = deno_env_to_object().unwrap();
+    let entries = js_sys::Object::entries(&obj.into());
+    let mut vars = Vec::with_capacity(entries.length() as usize);
+    for entry in entries.iter() {
+      let pair = js_sys::Array::from(&entry);
+      if let (Some(k), Some(v)) =
+        (pair.get(0).as_string(), pair.get(1).as_string())
+      {
+        vars.push((OsString::from(k), OsString::from(v)));
+      }
+    }
+    vars.into_iter()
   }
 }
 

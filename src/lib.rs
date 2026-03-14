@@ -89,6 +89,33 @@ pub trait EnvVar: BaseEnvVar {
 
 impl<T: BaseEnvVar> EnvVar for T {}
 
+// == EnvVars ==
+
+pub trait EnvVars {
+  type EnvVarsOs: Iterator<Item = (OsString, OsString)>;
+
+  fn env_vars_os(&self) -> Self::EnvVarsOs;
+
+  fn env_vars(&self) -> EnvVarsStrings<Self::EnvVarsOs> {
+    EnvVarsStrings(self.env_vars_os())
+  }
+}
+
+pub struct EnvVarsStrings<I>(I);
+
+impl<I: Iterator<Item = (OsString, OsString)>> Iterator for EnvVarsStrings<I> {
+  type Item = (String, String);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let (k, v) = self.0.next()?;
+      if let (Ok(k), Ok(v)) = (k.into_string(), v.into_string()) {
+        return Some((k, v));
+      }
+    }
+  }
+}
+
 // == EnvRemoveVar ==
 
 pub trait BaseEnvRemoveVar {

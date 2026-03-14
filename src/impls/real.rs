@@ -36,6 +36,15 @@ impl BaseEnvVar for RealSys {
   }
 }
 
+impl EnvVars for RealSys {
+  type EnvVarsOs = env::VarsOs;
+
+  #[inline]
+  fn env_vars_os(&self) -> Self::EnvVarsOs {
+    env::vars_os()
+  }
+}
+
 impl BaseEnvRemoveVar for RealSys {
   #[inline]
   fn base_env_remove_var(&self, key: &OsStr) {
