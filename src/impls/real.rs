@@ -1080,6 +1080,13 @@ impl crate::SystemRandom for RealSys {
   }
 }
 
+impl crate::ProcessExit for RealSys {
+  #[inline]
+  fn process_exit(&self, code: i32) -> ! {
+    std::process::exit(code)
+  }
+}
+
 impl crate::ThreadSleep for RealSys {
   #[inline]
   fn thread_sleep(&self, duration: std::time::Duration) {

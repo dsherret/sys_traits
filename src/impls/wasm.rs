@@ -97,6 +97,8 @@ extern "C" {
     path: &str,
     data: &[u8],
   ) -> std::result::Result<(), JsValue>;
+  #[wasm_bindgen(js_namespace = ["Deno"], js_name = exit)]
+  fn deno_exit(code: i32);
   #[wasm_bindgen(js_namespace = ["globalThis", "Date"], js_name = now)]
   fn date_now() -> f64;
   #[wasm_bindgen(js_namespace = ["globalThis", "crypto"], js_name = getRandomValues, catch)]
@@ -1154,6 +1156,13 @@ impl crate::SystemRandom for RealSys {
       }
     }
     Ok(())
+  }
+}
+
+impl crate::ProcessExit for RealSys {
+  fn process_exit(&self, code: i32) -> ! {
+    deno_exit(code);
+    unreachable!()
   }
 }
 

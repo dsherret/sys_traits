@@ -1573,6 +1573,12 @@ impl SystemRandom for InMemorySys {
   }
 }
 
+impl ProcessExit for InMemorySys {
+  fn process_exit(&self, code: i32) -> ! {
+    panic!("process exited with code {code}");
+  }
+}
+
 impl ThreadSleep for InMemorySys {
   fn thread_sleep(&self, dur: std::time::Duration) {
     if self.0.read().thread_sleep_enabled {
