@@ -1180,6 +1180,10 @@ pub trait SystemRandom {
   }
 }
 
+pub trait ProcessExit {
+  fn process_exit(&self, code: i32) -> !;
+}
+
 pub trait ThreadSleep {
   fn thread_sleep(&self, duration: std::time::Duration);
 }
