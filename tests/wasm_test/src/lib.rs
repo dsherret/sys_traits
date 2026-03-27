@@ -263,15 +263,12 @@ fn run() -> std::io::Result<()> {
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
   // umask
-  {
+  if !is_windows {
     let original = sys.env_umask().unwrap();
     let value = sys.env_set_umask(0o777).unwrap();
     assert_eq!(value, original);
     let value = sys.env_set_umask(original).unwrap();
-    // restore returns the previously set value
-    if !is_windows {
-      assert_eq!(value, 0o0777);
-    }
+    assert_eq!(value, 0o0777);
   }
 
   // permissions
