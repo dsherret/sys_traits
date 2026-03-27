@@ -318,13 +318,12 @@ fn run() -> std::io::Result<()> {
     assert!(metadata.changed().is_ok());
     assert!(metadata.created().is_ok());
     assert!(metadata.modified().is_ok());
-    assert!(metadata.dev().is_ok());
-    assert!(metadata.mode().is_ok());
-    assert!(metadata.ino().is_ok());
-    assert!(metadata.nlink().is_ok());
-    assert!(metadata.blocks().is_ok());
-
     if is_windows {
+      assert_eq!(metadata.dev().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.mode().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.blocks().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
