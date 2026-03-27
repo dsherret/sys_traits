@@ -431,7 +431,10 @@ fn run() -> std::io::Result<()> {
   {
     let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
     assert_eq!(
-      file.fs_file_lock(FsFileLockMode::Shared).unwrap_err().kind(),
+      file
+        .fs_file_lock(FsFileLockMode::Shared)
+        .unwrap_err()
+        .kind(),
       ErrorKind::Unsupported
     );
     assert_eq!(
@@ -439,7 +442,10 @@ fn run() -> std::io::Result<()> {
       ErrorKind::Unsupported
     );
     assert_eq!(
-      file.fs_file_try_lock(FsFileLockMode::Shared).unwrap_err().kind(),
+      file
+        .fs_file_try_lock(FsFileLockMode::Shared)
+        .unwrap_err()
+        .kind(),
       ErrorKind::Unsupported
     );
   }
