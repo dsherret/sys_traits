@@ -1083,24 +1083,18 @@ impl FsFileIsTerminal for WasmFile {
 
 impl FsFileLock for WasmFile {
   fn fs_file_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
-    Err(io::Error::new(
-      io::ErrorKind::Unsupported,
-      "file locking is not supported",
-    ))
+    // TODO: Node.js doesn't have file locking support
+    Ok(())
   }
 
   fn fs_file_try_lock(&mut self, _mode: FsFileLockMode) -> io::Result<()> {
-    Err(io::Error::new(
-      io::ErrorKind::Unsupported,
-      "file locking is not supported",
-    ))
+    // TODO: Node.js doesn't have file locking support
+    Ok(())
   }
 
   fn fs_file_unlock(&mut self) -> io::Result<()> {
-    Err(io::Error::new(
-      io::ErrorKind::Unsupported,
-      "file locking is not supported",
-    ))
+    // TODO: Node.js doesn't have file locking support
+    Ok(())
   }
 }
 
