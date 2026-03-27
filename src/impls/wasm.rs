@@ -254,10 +254,7 @@ impl BaseEnvRemoveVar for RealSys {
     let key = key.to_str().unwrap();
     let js_key = JsValue::from_str(key);
     NODE_PROCESS_ENV.with(|env| {
-      let _ = js_sys::Reflect::delete_property(
-        &env.clone().into(),
-        &js_key,
-      );
+      let _ = js_sys::Reflect::delete_property(&env.clone().into(), &js_key);
     });
   }
 }
