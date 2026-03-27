@@ -323,7 +323,10 @@ fn run() -> std::io::Result<()> {
       assert_eq!(metadata.mode().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
-      assert_eq!(metadata.blocks().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(
+        metadata.blocks().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
       assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
