@@ -12,12 +12,14 @@ use sys_traits::EnvCacheDir;
 use sys_traits::EnvCurrentDir;
 use sys_traits::EnvHomeDir;
 use sys_traits::EnvProgramsDir;
+use sys_traits::EnvRemoveVar;
 use sys_traits::EnvSetCurrentDir;
 use sys_traits::EnvSetUmask;
 use sys_traits::EnvSetVar;
 use sys_traits::EnvTempDir;
 use sys_traits::EnvUmask;
 use sys_traits::EnvVar;
+use sys_traits::EnvVars;
 use sys_traits::FileType;
 use sys_traits::FsCanonicalize;
 use sys_traits::FsChown;
@@ -104,6 +106,30 @@ fn run() -> std::io::Result<()> {
 
   sys.env_set_var("SYS_TRAITS_TEST", "Value");
   assert_eq!(sys.env_var("SYS_TRAITS_TEST").unwrap(), "Value");
+
+  // env_vars_os / env_vars
+  {
+    let vars: Vec<_> = sys.env_vars_os().collect();
+    assert!(vars
+      .iter()
+      .any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+    let vars: Vec<_> = sys.env_vars().collect();
+    assert!(vars
+      .iter()
+      .any(|(k, v)| k == "SYS_TRAITS_TEST" && v == "Value"));
+  }
+
+  sys.env_remove_var("SYS_TRAITS_TEST");
+  assert_eq!(
+    sys.env_var("SYS_TRAITS_TEST").err().unwrap(),
+    std::env::VarError::NotPresent
+  );
+
+  // env_vars after removal
+  {
+    let vars: Vec<_> = sys.env_vars().collect();
+    assert!(!vars.iter().any(|(k, _)| k == "SYS_TRAITS_TEST"));
+  }
 
   // file system
   assert!(sys.fs_exists_no_err(test_dir.join("src")));
@@ -237,27 +263,19 @@ fn run() -> std::io::Result<()> {
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
   // umask
-  if is_windows {
-    let err = sys.env_umask().unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-    let err = sys.env_set_umask(0o777).unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  } else {
+  {
     let original = sys.env_umask().unwrap();
     let value = sys.env_set_umask(0o777).unwrap();
     assert_eq!(value, original);
-    let _value = sys.env_set_umask(original).unwrap();
-    // TODO: broken in deno currently
-    // assert_eq!(value, 0o0777);
+    let value = sys.env_set_umask(original).unwrap();
+    // restore returns the previously set value
+    if !is_windows {
+      assert_eq!(value, 0o0777);
+    }
   }
 
   // permissions
-  if is_windows {
-    let err = sys.fs_set_permissions("file.txt", 0o0777).unwrap_err();
-    assert_eq!(err.kind(), ErrorKind::Unsupported);
-  } else {
-    sys.fs_set_permissions("file.txt", 0o0777).unwrap();
-  }
+  sys.fs_set_permissions("file.txt", 0o0777).unwrap();
 
   // copy file
   sys.fs_copy("file.txt", "copy.txt").unwrap();
@@ -293,21 +311,18 @@ fn run() -> std::io::Result<()> {
     assert!(metadata.changed().is_ok());
     assert!(metadata.created().is_ok());
     assert!(metadata.modified().is_ok());
+    assert!(metadata.dev().is_ok());
+    assert!(metadata.mode().is_ok());
+    assert!(metadata.ino().is_ok());
+    assert!(metadata.nlink().is_ok());
+    assert!(metadata.blocks().is_ok());
 
     if is_windows {
-      assert_eq!(metadata.dev().unwrap_err().kind(), ErrorKind::Unsupported);
-      assert_eq!(metadata.mode().unwrap_err().kind(), ErrorKind::Unsupported);
-      assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
-      assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(
         metadata.blksize().unwrap_err().kind(),
-        ErrorKind::Unsupported
-      );
-      assert_eq!(
-        metadata.blocks().unwrap_err().kind(),
         ErrorKind::Unsupported
       );
       assert_eq!(

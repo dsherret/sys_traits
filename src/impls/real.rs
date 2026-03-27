@@ -36,6 +36,22 @@ impl BaseEnvVar for RealSys {
   }
 }
 
+impl EnvVars for RealSys {
+  type EnvVarsOs = env::VarsOs;
+
+  #[inline]
+  fn env_vars_os(&self) -> Self::EnvVarsOs {
+    env::vars_os()
+  }
+}
+
+impl BaseEnvRemoveVar for RealSys {
+  #[inline]
+  fn base_env_remove_var(&self, key: &OsStr) {
+    env::remove_var(key);
+  }
+}
+
 impl BaseEnvSetVar for RealSys {
   #[inline]
   fn base_env_set_var(&self, key: &OsStr, value: &OsStr) {
@@ -623,7 +639,7 @@ impl FsDirEntry for RealFsDirEntry {
   type Metadata = RealFsMetadata;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     Cow::Owned(self.0.file_name())
   }
 
@@ -638,7 +654,7 @@ impl FsDirEntry for RealFsDirEntry {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     Cow::Owned(self.0.path())
   }
 }
@@ -1064,6 +1080,13 @@ impl crate::SystemRandom for RealSys {
   }
 }
 
+impl crate::ProcessExit for RealSys {
+  #[inline]
+  fn process_exit(&self, code: i32) -> ! {
+    std::process::exit(code)
+  }
+}
+
 impl crate::ThreadSleep for RealSys {
   #[inline]
   fn thread_sleep(&self, duration: std::time::Duration) {
@@ -1175,5 +1198,11 @@ mod test {
     } else {
       assert_eq!(result.unwrap_err().kind(), ErrorKind::Unsupported);
     }
+  }
+
+  #[test]
+  fn test_fs_canonicalize_empty() {
+    let result = RealSys.fs_canonicalize("");
+    assert_eq!(result.unwrap_err().kind(), ErrorKind::NotFound);
   }
 }

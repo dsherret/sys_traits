@@ -87,3 +87,43 @@ There's two reasons for this:
 1. You can't box traits with `impl ...`.
 2. By design it limits code generation of multiple kinds of `impl AsRef<Path>`
    and `impl AsRef<[u8]>` to only being a single statement.
+
+## Error Context
+
+By default, filesystem errors don't include path information:
+
+```
+No such file or directory (os error 2)
+```
+
+Use `.with_paths_in_errors()` to wrap operations with context that includes the
+operation name and path:
+
+```rs
+use sys_traits::PathsInErrorsExt;
+use sys_traits::impls::RealSys;
+
+let sys = RealSys;
+
+// returns: "failed to read '/path/to/file': No such file or directory (os error 2)"
+sys.with_paths_in_errors().fs_read("/path/to/file")?;
+```
+
+The returned `io::Error` preserves the original error kind and can be downcast
+to `OperationError` for programmatic access:
+
+```rs
+use sys_traits::OperationError;
+use sys_traits::OperationErrorKind;
+
+let err = sys.with_paths_in_errors().fs_read("/nonexistent").unwrap_err();
+
+// error kind is preserved
+assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+
+// downcast for programmatic access
+if let Some(op_err) = err.get_ref().and_then(|e| e.downcast_ref::<OperationError>()) {
+  assert_eq!(op_err.operation(), "read");
+  assert_eq!(op_err.kind(), &OperationErrorKind::WithPath("/nonexistent".to_string()));
+}
+```

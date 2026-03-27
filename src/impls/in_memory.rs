@@ -102,6 +102,14 @@ impl DirectoryEntry {
     }
   }
 
+  fn mode(&self) -> u32 {
+    match self {
+      DirectoryEntry::File(f) => f.inner.read().mode,
+      DirectoryEntry::Directory(d) => d.inner.read().mode,
+      DirectoryEntry::Symlink(s) => s.inner.read().mode,
+    }
+  }
+
   fn set_filetimes(&self, atime: SystemTime, mtime: SystemTime) {
     match self {
       DirectoryEntry::Directory(entry) => {
@@ -135,6 +143,7 @@ struct SymlinkInner {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 #[derive(Debug)]
@@ -150,6 +159,7 @@ struct DirectoryInner {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 #[derive(Debug)]
@@ -361,6 +371,7 @@ impl InMemorySysInner {
                 changed: time,
                 created: time,
                 modified: time,
+                mode: 0o755,
               }),
               entries: vec![],
             };
@@ -416,6 +427,13 @@ impl Default for InMemorySys {
 }
 
 impl InMemorySys {
+  pub fn new_with_cwd(cwd: impl AsRef<Path>) -> Self {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all(cwd.as_ref()).unwrap();
+    sys.env_set_current_dir(cwd.as_ref()).unwrap();
+    sys
+  }
+
   pub fn set_seed(&self, seed: Option<u64>) {
     self.0.write().random_seed = seed;
   }
@@ -469,6 +487,20 @@ impl BaseEnvSetCurrentDir for InMemorySys {
 impl BaseEnvVar for InMemorySys {
   fn base_env_var_os(&self, key: &OsStr) -> Option<OsString> {
     self.0.read().envs.get(key).cloned()
+  }
+}
+
+impl EnvVars for InMemorySys {
+  type EnvVarsOs = std::collections::hash_map::IntoIter<OsString, OsString>;
+
+  fn env_vars_os(&self) -> Self::EnvVarsOs {
+    self.0.read().envs.clone().into_iter()
+  }
+}
+
+impl BaseEnvRemoveVar for InMemorySys {
+  fn base_env_remove_var(&self, key: &OsStr) {
+    self.0.write().envs.remove(key);
   }
 }
 
@@ -526,6 +558,9 @@ impl EnvSetUmask for InMemorySys {
 
 impl BaseFsCanonicalize for InMemorySys {
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
+    if path.as_os_str().is_empty() {
+      return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+    }
     let inner = self.0.read();
     let path = inner.to_absolute_path(path);
     let (path, _) = inner.lookup_entry(&path)?;
@@ -637,6 +672,7 @@ pub struct InMemoryMetadata {
   changed: SystemTime,
   created: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 macro_rules! not_supported_metadata_prop {
@@ -682,9 +718,13 @@ impl FsMetadataValue for InMemoryMetadata {
     Ok(self.modified)
   }
 
+  #[inline]
+  fn mode(&self) -> Result<u32> {
+    Ok(self.mode)
+  }
+
   not_supported_metadata_prop!(dev, u64);
   not_supported_metadata_prop!(ino, u64);
-  not_supported_metadata_prop!(mode, u32);
   not_supported_metadata_prop!(nlink, u64);
   not_supported_metadata_prop!(uid, u32);
   not_supported_metadata_prop!(gid, u32);
@@ -712,6 +752,7 @@ impl BaseFsMetadata for InMemorySys {
       changed: entry.changed(),
       created: entry.created(),
       modified: entry.modified(),
+      mode: entry.mode(),
     })
   }
 
@@ -736,6 +777,7 @@ impl BaseFsMetadata for InMemorySys {
           changed: inner.changed,
           created: inner.created,
           modified: inner.modified,
+          mode: inner.mode,
         })
       }
       LookupNoFollowEntry::Found(_, entry) => Ok(InMemoryMetadata {
@@ -745,6 +787,7 @@ impl BaseFsMetadata for InMemorySys {
         changed: entry.changed(),
         created: entry.created(),
         modified: entry.modified(),
+        mode: entry.mode(),
       }),
     }
   }
@@ -913,6 +956,7 @@ pub struct InMemoryDirEntry {
   created: SystemTime,
   changed: SystemTime,
   modified: SystemTime,
+  mode: u32,
 }
 
 impl InMemoryDirEntry {
@@ -926,6 +970,7 @@ impl InMemoryDirEntry {
       changed: entry.changed(),
       created: entry.created(),
       modified: entry.modified(),
+      mode: entry.mode(),
     }
   }
 }
@@ -933,7 +978,7 @@ impl InMemoryDirEntry {
 impl FsDirEntry for InMemoryDirEntry {
   type Metadata = InMemoryMetadata;
 
-  fn file_name(&self) -> std::borrow::Cow<std::ffi::OsStr> {
+  fn file_name(&self) -> std::borrow::Cow<'_, std::ffi::OsStr> {
     std::borrow::Cow::Owned(self.name.clone().into())
   }
 
@@ -949,10 +994,11 @@ impl FsDirEntry for InMemoryDirEntry {
       created: self.created,
       changed: self.changed,
       modified: self.modified,
+      mode: self.mode,
     })
   }
 
-  fn path(&self) -> std::borrow::Cow<std::path::Path> {
+  fn path(&self) -> std::borrow::Cow<'_, std::path::Path> {
     std::borrow::Cow::Borrowed(self.path.as_ref())
   }
 }
@@ -1225,8 +1271,25 @@ impl BaseFsSetPermissions for InMemorySys {
     path: &Path,
     mode: u32,
   ) -> std::io::Result<()> {
-    let mut file = self.base_fs_open(path, &OpenOptions::new_write())?;
-    file.fs_file_set_permissions(mode)
+    let inner = self.0.read();
+    let path = inner.to_absolute_path(path);
+    let (_, entry) = inner.lookup_entry(&path)?;
+
+    match entry {
+      DirectoryEntry::File(f) => {
+        let mut inner = f.inner.write();
+        inner.mode = mode;
+      }
+      DirectoryEntry::Directory(d) => {
+        let mut inner = d.inner.write();
+        inner.mode = mode;
+      }
+      DirectoryEntry::Symlink(s) => {
+        let mut inner = s.inner.write();
+        inner.mode = mode;
+      }
+    }
+    Ok(())
   }
 }
 
@@ -1276,6 +1339,7 @@ impl BaseFsSymlinkFile for InMemorySys {
             changed: time,
             created: time,
             modified: time,
+            mode: 0o777,
           }),
         });
         Ok(())
@@ -1291,6 +1355,7 @@ impl BaseFsSymlinkFile for InMemorySys {
               changed: time,
               created: time,
               modified: time,
+              mode: 0o777,
             }),
           }),
         );
@@ -1505,6 +1570,12 @@ impl SystemRandom for InMemorySys {
         }
       }
     }
+  }
+}
+
+impl ProcessExit for InMemorySys {
+  fn process_exit(&self, code: i32) -> ! {
+    panic!("process exited with code {code}");
   }
 }
 
@@ -1771,6 +1842,15 @@ mod tests {
     sys.fs_create_dir_all("/absolute").unwrap();
     let abs = sys.fs_canonicalize("/absolute").unwrap();
     assert_eq!(abs, PathBuf::from("/absolute"));
+  }
+
+  #[test]
+  fn test_fs_canonicalize_empty() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a/b/c").unwrap();
+    sys.env_set_current_dir("/a/b").unwrap();
+    let result = sys.fs_canonicalize("");
+    assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::NotFound);
   }
 
   #[test]
@@ -2046,5 +2126,40 @@ mod tests {
     sys.fs_create_dir_all("/test/test").unwrap();
     assert!(sys.fs_remove_dir_all("/test").is_ok());
     assert!(!sys.fs_exists_no_err("/test"));
+  }
+
+  #[test]
+  fn test_new_with_cwd() {
+    let cwd = if cfg!(windows) { "C:\\dir" } else { "/dir" };
+
+    let sys = InMemorySys::new_with_cwd(cwd);
+    assert_eq!(sys.env_current_dir().unwrap(), PathBuf::from(cwd));
+    assert!(sys.fs_is_dir(cwd).unwrap());
+  }
+
+  #[test]
+  fn test_set_permissions_all_types() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/test").unwrap();
+
+    // Test file permissions
+    sys.fs_write("/test/file.txt", b"content").unwrap();
+    sys.fs_set_permissions("/test/file.txt", 0o600).unwrap();
+    let metadata = sys.fs_metadata("/test/file.txt").unwrap();
+    assert_eq!(metadata.mode().unwrap(), 0o600);
+
+    // Test directory permissions
+    sys.fs_set_permissions("/test", 0o700).unwrap();
+    let dir_metadata = sys.fs_metadata("/test").unwrap();
+    assert_eq!(dir_metadata.mode().unwrap(), 0o700);
+
+    // Test symlink permissions
+    sys
+      .fs_symlink_file("/test/file.txt", "/test/link.txt")
+      .unwrap();
+    sys.fs_set_permissions("/test/link.txt", 0o755).unwrap();
+    // This follows the symlink, so it changes the target file's mode
+    let file_metadata = sys.fs_metadata("/test/file.txt").unwrap();
+    assert_eq!(file_metadata.mode().unwrap(), 0o755);
   }
 }

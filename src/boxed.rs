@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::io;
 use std::path::Path;
 use std::time::SystemTime;
@@ -301,7 +302,7 @@ impl<T: FsDirEntry + 'static> FsDirEntry for MappedMetadataFsDirEntry<T> {
   type Metadata = BoxedFsMetadataValue;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     self.0.file_name()
   }
 
@@ -319,7 +320,7 @@ impl<T: FsDirEntry + 'static> FsDirEntry for MappedMetadataFsDirEntry<T> {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     self.0.path()
   }
 }
@@ -339,7 +340,7 @@ impl FsDirEntry for BoxedFsDirEntry {
   type Metadata = BoxedFsMetadataValue;
 
   #[inline]
-  fn file_name(&self) -> Cow<OsStr> {
+  fn file_name(&self) -> Cow<'_, OsStr> {
     self.0.file_name()
   }
 
@@ -354,10 +355,30 @@ impl FsDirEntry for BoxedFsDirEntry {
   }
 
   #[inline]
-  fn path(&self) -> Cow<Path> {
+  fn path(&self) -> Cow<'_, Path> {
     self.0.path()
   }
 }
+
+// == EnvVarsBoxed ==
+
+pub trait EnvVarsBoxed {
+  fn env_vars_os_boxed(&self)
+    -> Box<dyn Iterator<Item = (OsString, OsString)>>;
+}
+
+impl<T: crate::EnvVars> EnvVarsBoxed for T
+where
+  T::EnvVarsOs: 'static,
+{
+  fn env_vars_os_boxed(
+    &self,
+  ) -> Box<dyn Iterator<Item = (OsString, OsString)>> {
+    Box::new(self.env_vars_os())
+  }
+}
+
+// == FsReadDirBoxed ==
 
 pub trait FsReadDirBoxed {
   fn fs_read_dir_boxed(

@@ -11,9 +11,16 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub mod boxed;
+pub mod ctx;
 pub mod impls;
 
 pub use sys_traits_macros::auto_impl;
+
+pub use self::ctx::FsFileWithPathsInErrors;
+pub use self::ctx::OperationError;
+pub use self::ctx::OperationErrorKind;
+pub use self::ctx::PathsInErrorsExt;
+pub use self::ctx::SysWithPathsInErrors;
 
 use self::boxed::BoxedFsFile;
 use self::boxed::BoxedFsMetadataValue;
@@ -81,6 +88,48 @@ pub trait EnvVar: BaseEnvVar {
 }
 
 impl<T: BaseEnvVar> EnvVar for T {}
+
+// == EnvVars ==
+
+pub trait EnvVars {
+  type EnvVarsOs: Iterator<Item = (OsString, OsString)>;
+
+  fn env_vars_os(&self) -> Self::EnvVarsOs;
+
+  fn env_vars(&self) -> EnvVarsStrings<Self::EnvVarsOs> {
+    EnvVarsStrings(self.env_vars_os())
+  }
+}
+
+pub struct EnvVarsStrings<I>(I);
+
+impl<I: Iterator<Item = (OsString, OsString)>> Iterator for EnvVarsStrings<I> {
+  type Item = (String, String);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    loop {
+      let (k, v) = self.0.next()?;
+      if let (Ok(k), Ok(v)) = (k.into_string(), v.into_string()) {
+        return Some((k, v));
+      }
+    }
+  }
+}
+
+// == EnvRemoveVar ==
+
+pub trait BaseEnvRemoveVar {
+  #[doc(hidden)]
+  fn base_env_remove_var(&self, key: &OsStr);
+}
+
+pub trait EnvRemoveVar: BaseEnvRemoveVar {
+  fn env_remove_var(&self, key: impl AsRef<OsStr>) {
+    self.base_env_remove_var(key.as_ref())
+  }
+}
+
+impl<T: BaseEnvRemoveVar> EnvRemoveVar for T {}
 
 // == EnvSetVar ==
 
@@ -776,10 +825,10 @@ impl<T: BaseFsRead> FsRead for T {}
 pub trait FsDirEntry: std::fmt::Debug {
   type Metadata: FsMetadataValue;
 
-  fn file_name(&self) -> Cow<OsStr>;
+  fn file_name(&self) -> Cow<'_, OsStr>;
   fn file_type(&self) -> io::Result<FileType>;
   fn metadata(&self) -> io::Result<Self::Metadata>;
-  fn path(&self) -> Cow<Path>;
+  fn path(&self) -> Cow<'_, Path>;
 }
 
 pub trait BaseFsReadDir {
@@ -1129,6 +1178,10 @@ pub trait SystemRandom {
     self.sys_random(&mut buf)?;
     Ok(u64::from_le_bytes(buf))
   }
+}
+
+pub trait ProcessExit {
+  fn process_exit(&self, code: i32) -> !;
 }
 
 pub trait ThreadSleep {

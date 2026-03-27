@@ -26,7 +26,11 @@ mod real;
 mod wasm;
 
 #[cfg(feature = "memory")]
+pub use in_memory::InMemoryDirEntry;
+#[cfg(feature = "memory")]
 pub use in_memory::InMemoryFile;
+#[cfg(feature = "memory")]
+pub use in_memory::InMemoryMetadata;
 #[cfg(feature = "memory")]
 pub use in_memory::InMemorySys;
 
@@ -121,7 +125,7 @@ pub fn wasm_string_to_path(path: String) -> PathBuf {
 ///
 /// See notes on `wasm_string_to_path` for more information.
 #[cfg(feature = "real")]
-pub fn wasm_path_to_str(path: &std::path::Path) -> std::borrow::Cow<str> {
+pub fn wasm_path_to_str(path: &std::path::Path) -> std::borrow::Cow<'_, str> {
   #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
   {
     if wasm::is_windows() {

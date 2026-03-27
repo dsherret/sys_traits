@@ -162,6 +162,8 @@ extern "C" {
   static NODE_PROCESS_ENV: JsValue;
   #[wasm_bindgen(js_name = platform, thread_local_v2)]
   static NODE_PROCESS_PLATFORM: String;
+  #[wasm_bindgen(js_name = exit)]
+  fn node_process_exit(code: i32);
 }
 
 #[wasm_bindgen(module = "node:tty")]
@@ -184,11 +186,6 @@ extern "C" {
     timeout: f64,
   ) -> String;
 
-  // Node.js TTY for terminal detection
-  #[wasm_bindgen(js_namespace = ["require", "tty"])]
-  type NodeTty;
-  #[wasm_bindgen(static_method_of = NodeTty, js_name = isatty)]
-  fn is_tty(fd: i32) -> bool;
 }
 
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
@@ -230,6 +227,38 @@ impl BaseEnvVar for RealSys {
       let value = js_sys::Reflect::get(env_obj, &js_key).ok()?;
       value.as_string().map(OsString::from)
     })
+  }
+}
+
+impl EnvVars for RealSys {
+  type EnvVarsOs = std::vec::IntoIter<(OsString, OsString)>;
+
+  fn env_vars_os(&self) -> Self::EnvVarsOs {
+    let obj = NODE_PROCESS_ENV.with(|env| env.clone());
+    let entries = js_sys::Object::entries(&obj.into());
+    let mut vars = Vec::with_capacity(entries.length() as usize);
+    for entry in entries.iter() {
+      let pair = js_sys::Array::from(&entry);
+      if let (Some(k), Some(v)) =
+        (pair.get(0).as_string(), pair.get(1).as_string())
+      {
+        vars.push((OsString::from(k), OsString::from(v)));
+      }
+    }
+    vars.into_iter()
+  }
+}
+
+impl BaseEnvRemoveVar for RealSys {
+  fn base_env_remove_var(&self, key: &OsStr) {
+    let key = key.to_str().unwrap();
+    let js_key = JsValue::from_str(key);
+    NODE_PROCESS_ENV.with(|env| {
+      let _ = js_sys::Reflect::delete_property(
+        &env.clone().into(),
+        &js_key,
+      );
+    });
   }
 }
 
@@ -1213,6 +1242,13 @@ impl crate::SystemRandom for RealSys {
       }
     }
     Ok(())
+  }
+}
+
+impl crate::ProcessExit for RealSys {
+  fn process_exit(&self, code: i32) -> ! {
+    node_process_exit(code);
+    unreachable!()
   }
 }
 
