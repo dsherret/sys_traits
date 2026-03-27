@@ -427,14 +427,21 @@ fn run() -> std::io::Result<()> {
     assert!(!file.fs_file_is_terminal());
   }
 
-  // file lock
+  // file lock (not supported in wasm)
   {
     let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
-    file.fs_file_lock(FsFileLockMode::Shared)?;
-    file.fs_file_unlock()?;
-    file.fs_file_lock(FsFileLockMode::Exclusive)?;
-    file.fs_file_unlock()?;
-    file.fs_file_try_lock(FsFileLockMode::Shared)?;
+    assert_eq!(
+      file.fs_file_lock(FsFileLockMode::Shared).unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
+    assert_eq!(
+      file.fs_file_unlock().unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
+    assert_eq!(
+      file.fs_file_try_lock(FsFileLockMode::Shared).unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
   }
 
   // sync_all and sync_data
