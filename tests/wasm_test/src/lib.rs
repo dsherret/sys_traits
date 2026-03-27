@@ -274,7 +274,10 @@ fn run() -> std::io::Result<()> {
   // permissions
   if is_windows {
     assert_eq!(
-      sys.fs_set_permissions("file.txt", 0o0777).unwrap_err().kind(),
+      sys
+        .fs_set_permissions("file.txt", 0o0777)
+        .unwrap_err()
+        .kind(),
       ErrorKind::Unsupported
     );
   } else {
