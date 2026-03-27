@@ -263,19 +263,26 @@ fn run() -> std::io::Result<()> {
   assert_eq!(sys.fs_read_to_string("hardlink.txt")?, "Hello there!");
 
   // umask
-  {
+  if !is_windows {
     let original = sys.env_umask().unwrap();
     let value = sys.env_set_umask(0o777).unwrap();
     assert_eq!(value, original);
     let value = sys.env_set_umask(original).unwrap();
-    // restore returns the previously set value
-    if !is_windows {
-      assert_eq!(value, 0o0777);
-    }
+    assert_eq!(value, 0o0777);
   }
 
   // permissions
-  sys.fs_set_permissions("file.txt", 0o0777).unwrap();
+  if is_windows {
+    assert_eq!(
+      sys
+        .fs_set_permissions("file.txt", 0o0777)
+        .unwrap_err()
+        .kind(),
+      ErrorKind::Unsupported
+    );
+  } else {
+    sys.fs_set_permissions("file.txt", 0o0777).unwrap();
+  }
 
   // copy file
   sys.fs_copy("file.txt", "copy.txt").unwrap();
@@ -311,13 +318,15 @@ fn run() -> std::io::Result<()> {
     assert!(metadata.changed().is_ok());
     assert!(metadata.created().is_ok());
     assert!(metadata.modified().is_ok());
-    assert!(metadata.dev().is_ok());
-    assert!(metadata.mode().is_ok());
-    assert!(metadata.ino().is_ok());
-    assert!(metadata.nlink().is_ok());
-    assert!(metadata.blocks().is_ok());
-
     if is_windows {
+      assert_eq!(metadata.dev().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.mode().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.ino().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(metadata.nlink().unwrap_err().kind(), ErrorKind::Unsupported);
+      assert_eq!(
+        metadata.blocks().unwrap_err().kind(),
+        ErrorKind::Unsupported
+      );
       assert_eq!(metadata.uid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.gid().unwrap_err().kind(), ErrorKind::Unsupported);
       assert_eq!(metadata.rdev().unwrap_err().kind(), ErrorKind::Unsupported);
@@ -342,6 +351,8 @@ fn run() -> std::io::Result<()> {
         ErrorKind::Unsupported
       );
     } else {
+      assert!(metadata.dev().is_ok());
+      assert!(metadata.mode().is_ok());
       assert!(metadata.ino().is_ok());
       assert!(metadata.nlink().is_ok());
       assert!(metadata.uid().is_ok());
@@ -428,13 +439,20 @@ fn run() -> std::io::Result<()> {
     assert!(!file.fs_file_is_terminal());
   }
 
-  // file lock
+  // file lock (not supported in wasm)
   {
     let mut file = sys.fs_open("copy.txt", &OpenOptions::new_read())?;
-    file.fs_file_lock(FsFileLockMode::Shared)?;
-    file.fs_file_unlock()?;
-    file.fs_file_lock(FsFileLockMode::Exclusive)?;
-    file.fs_file_unlock()?;
+    assert_eq!(
+      file
+        .fs_file_lock(FsFileLockMode::Shared)
+        .unwrap_err()
+        .kind(),
+      ErrorKind::Unsupported
+    );
+    assert_eq!(
+      file.fs_file_unlock().unwrap_err().kind(),
+      ErrorKind::Unsupported
+    );
     assert_eq!(
       file
         .fs_file_try_lock(FsFileLockMode::Shared)
