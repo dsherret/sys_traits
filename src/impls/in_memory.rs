@@ -1117,6 +1117,10 @@ impl BaseFsRename for InMemorySys {
     let from = inner.to_absolute_path(from.as_ref());
     let to = inner.to_absolute_path(to.as_ref());
 
+    if from == to {
+      return Ok(());
+    }
+
     let from_parent_path = match from.parent() {
       Some(p) if !p.as_os_str().is_empty() => p,
       _ => {
@@ -1132,24 +1136,9 @@ impl BaseFsRename for InMemorySys {
         return Err(Error::new(ErrorKind::Other, "No source file name found"));
       }
     };
-
-    let from_parent = inner.find_directory_mut(from_parent_path, false)?;
-    let from_idx = match from_parent
-      .entries
-      .binary_search_by(|e| e.name().cmp(&from_file_name))
-    {
-      Ok(pos) => pos,
-      Err(_) => {
-        return Err(Error::new(ErrorKind::NotFound, "Source file not found"));
-      }
-    };
-    let file_entry = from_parent.entries.remove(from_idx);
-
     let to_parent_path = match to.parent() {
       Some(p) if !p.as_os_str().is_empty() => p,
       _ => {
-        // If `to` has no valid parent, restore the original file entry:
-        from_parent.entries.insert(from_idx, file_entry);
         return Err(Error::new(
           ErrorKind::Other,
           "Cannot rename to root or invalid path",
@@ -1159,8 +1148,6 @@ impl BaseFsRename for InMemorySys {
     let to_file_name = match to.file_name() {
       Some(n) => n.to_string_lossy(),
       None => {
-        // restore
-        from_parent.entries.insert(from_idx, file_entry);
         return Err(Error::new(
           ErrorKind::Other,
           "No destination file name found",
@@ -1168,48 +1155,95 @@ impl BaseFsRename for InMemorySys {
       }
     };
 
-    let to_parent = inner.find_directory_mut(to_parent_path, true)?;
-    match file_entry {
-      DirectoryEntry::File(mut f) => {
-        match to_parent
-          .entries
-          .binary_search_by(|e| e.name().cmp(&to_file_name))
-        {
-          Ok(pos) => match &to_parent.entries[pos] {
-            DirectoryEntry::Directory(_) => {
-              let from_parent =
-                inner.find_directory_mut(from_parent_path, false)?;
-              from_parent
-                .entries
-                .insert(from_idx, DirectoryEntry::File(f));
-              return Err(Error::new(
-                ErrorKind::Other,
-                "Cannot rename to a directory",
-              ));
-            }
-            _ => {
-              f.name = to_file_name.to_string();
-              to_parent.entries[pos] = DirectoryEntry::File(f);
-            }
-          },
-          Err(insert_pos) => {
-            f.name = to_file_name.to_string();
-            to_parent
-              .entries
-              .insert(insert_pos, DirectoryEntry::File(f));
-          }
-        }
+    // gather source/destination kinds up front so we can validate without
+    // having to roll back a partial mutation
+    let source_is_dir = match inner.lookup_entry_detail(&from)? {
+      LookupEntry::Found(_, entry) => {
+        matches!(entry, DirectoryEntry::Directory(_))
       }
-      _ => {
-        let from_parent = inner.find_directory_mut(from_parent_path, false)?;
-        from_parent.entries.insert(from_idx, file_entry);
+      LookupEntry::NotFound(_) => {
+        return Err(Error::new(ErrorKind::NotFound, "Source not found"));
+      }
+    };
+
+    // prevent moving a directory into itself or one of its descendants
+    if source_is_dir && to.starts_with(&from) {
+      return Err(Error::new(
+        ErrorKind::Other,
+        "Cannot rename a directory into itself or a subdirectory",
+      ));
+    }
+
+    let dest_state = match inner.lookup_entry_detail(&to)? {
+      LookupEntry::Found(_, entry) => {
+        let is_dir = matches!(entry, DirectoryEntry::Directory(_));
+        let dir_empty = match entry {
+          DirectoryEntry::Directory(d) => d.entries.is_empty(),
+          _ => false,
+        };
+        Some((is_dir, dir_empty))
+      }
+      LookupEntry::NotFound(_) => None,
+    };
+
+    if let Some((dest_is_dir, dest_dir_empty)) = dest_state {
+      if source_is_dir && !dest_is_dir {
         return Err(Error::new(
           ErrorKind::Other,
-          "Cannot rename directories or symlinks here",
+          "Cannot overwrite a non-directory with a directory",
+        ));
+      }
+      if !source_is_dir && dest_is_dir {
+        return Err(Error::new(
+          ErrorKind::Other,
+          "Cannot overwrite a directory with a non-directory",
+        ));
+      }
+      if dest_is_dir && !dest_dir_empty {
+        return Err(Error::new(
+          ErrorKind::AlreadyExists,
+          "Destination directory is not empty",
         ));
       }
     }
+
+    // remove the source entry
+    let from_parent = inner.find_directory_mut(from_parent_path, false)?;
+    let from_idx = match from_parent
+      .entries
+      .binary_search_by(|e| e.name().cmp(&from_file_name))
+    {
+      Ok(pos) => pos,
+      Err(_) => {
+        return Err(Error::new(ErrorKind::NotFound, "Source not found"));
+      }
+    };
+    let mut entry = from_parent.entries.remove(from_idx);
+
+    // insert into the destination parent, replacing any existing entry
+    let to_parent = inner.find_directory_mut(to_parent_path, true)?;
+    let pos = to_parent
+      .entries
+      .binary_search_by(|e| e.name().cmp(&to_file_name));
+    set_entry_name(&mut entry, to_file_name.into_owned());
+    match pos {
+      Ok(pos) => {
+        to_parent.entries[pos] = entry;
+      }
+      Err(insert_pos) => {
+        to_parent.entries.insert(insert_pos, entry);
+      }
+    }
+
     Ok(())
+  }
+}
+
+fn set_entry_name(entry: &mut DirectoryEntry, name: String) {
+  match entry {
+    DirectoryEntry::File(f) => f.name = name,
+    DirectoryEntry::Directory(d) => d.name = name,
+    DirectoryEntry::Symlink(s) => s.name = name,
   }
 }
 
@@ -1890,6 +1924,96 @@ mod tests {
     let file1_exists = sys.fs_exists_no_err("/dir/file1.txt");
     let file2_exists = sys.fs_exists_no_err("/dir/file2.txt");
     assert!(!file1_exists && file2_exists);
+  }
+
+  #[test]
+  fn test_rename_directory() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a/old").unwrap();
+    sys.fs_write("/a/old/inner.txt", b"hi").unwrap();
+    sys.fs_create_dir_all("/a/old/nested").unwrap();
+    sys.fs_write("/a/old/nested/deep.txt", b"deep").unwrap();
+
+    sys.fs_rename("/a/old", "/a/new").unwrap();
+
+    assert!(!sys.fs_exists_no_err("/a/old"));
+    assert!(sys.fs_is_dir_no_err("/a/new"));
+    assert_eq!(&*sys.fs_read_to_string("/a/new/inner.txt").unwrap(), "hi");
+    assert_eq!(
+      &*sys.fs_read_to_string("/a/new/nested/deep.txt").unwrap(),
+      "deep"
+    );
+  }
+
+  #[test]
+  fn test_rename_directory_across_parents() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/src/inner").unwrap();
+    sys.fs_write("/src/inner/x.txt", b"x").unwrap();
+    sys.fs_create_dir_all("/dst").unwrap();
+
+    sys.fs_rename("/src/inner", "/dst/inner").unwrap();
+
+    assert!(!sys.fs_exists_no_err("/src/inner"));
+    assert!(sys.fs_is_dir_no_err("/dst/inner"));
+    assert_eq!(&*sys.fs_read_to_string("/dst/inner/x.txt").unwrap(), "x");
+  }
+
+  #[test]
+  fn test_rename_directory_onto_empty_directory() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/from").unwrap();
+    sys.fs_write("/from/keep.txt", b"keep").unwrap();
+    sys.fs_create_dir_all("/to").unwrap();
+
+    sys.fs_rename("/from", "/to").unwrap();
+
+    assert!(!sys.fs_exists_no_err("/from"));
+    assert_eq!(&*sys.fs_read_to_string("/to/keep.txt").unwrap(), "keep");
+  }
+
+  #[test]
+  fn test_rename_directory_onto_non_empty_directory_fails() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/from").unwrap();
+    sys.fs_create_dir_all("/to").unwrap();
+    sys.fs_write("/to/keeper.txt", b"keep").unwrap();
+
+    let err = sys.fs_rename("/from", "/to").unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::AlreadyExists);
+    assert!(sys.fs_is_dir_no_err("/from"));
+    assert!(sys.fs_exists_no_err("/to/keeper.txt"));
+  }
+
+  #[test]
+  fn test_rename_directory_into_itself_fails() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a").unwrap();
+    let err = sys.fs_rename("/a", "/a/b").unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Other);
+    assert!(sys.fs_is_dir_no_err("/a"));
+  }
+
+  #[test]
+  fn test_rename_directory_onto_file_fails() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/dir").unwrap();
+    sys.fs_write("/file", b"data").unwrap();
+    let err = sys.fs_rename("/dir", "/file").unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Other);
+    assert!(sys.fs_is_dir_no_err("/dir"));
+    assert!(sys.fs_is_file_no_err("/file"));
+  }
+
+  #[test]
+  fn test_rename_file_onto_directory_fails() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/dir").unwrap();
+    sys.fs_write("/file", b"data").unwrap();
+    let err = sys.fs_rename("/file", "/dir").unwrap_err();
+    assert_eq!(err.kind(), ErrorKind::Other);
+    assert!(sys.fs_is_file_no_err("/file"));
+    assert!(sys.fs_is_dir_no_err("/dir"));
   }
 
   #[test]
