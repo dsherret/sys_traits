@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+mod cwd;
+
+pub use cwd::CwdSys;
+
 #[cfg(feature = "real")]
 // do not implement Copy so that swapping out the RealSys
 // with another implementation that requires Clone based
