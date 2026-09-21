@@ -184,6 +184,16 @@ enum LookupNoFollowEntry<'a> {
   Found(PathBuf, &'a DirectoryEntry),
 }
 
+enum LookupUntilSymlinkEntry<'a> {
+  Done(LookupNoFollowEntry<'a>),
+  /// A symlink was found before the final component. Contains the
+  /// symlink's target joined with the remaining components.
+  MidPathSymlink(PathBuf),
+}
+
+/// Same as Linux's limit.
+const MAX_MID_PATH_SYMLINKS: usize = 40;
+
 #[derive(Debug)]
 struct InMemorySysInner {
   // Linux/Mac will always have one dir here, but Windows
@@ -261,6 +271,31 @@ impl InMemorySysInner {
     &'a self,
     path: &Path,
   ) -> Result<LookupNoFollowEntry<'a>> {
+    let mut path = Cow::Borrowed(path);
+    let mut followed_count = 0;
+    loop {
+      match self.lookup_entry_detail_until_symlink(&path)? {
+        LookupUntilSymlinkEntry::Done(entry) => return Ok(entry),
+        // only the final component isn't followed, so follow
+        // this symlink found in the middle of the path
+        LookupUntilSymlinkEntry::MidPathSymlink(resolved_path) => {
+          followed_count += 1;
+          if followed_count > MAX_MID_PATH_SYMLINKS {
+            return Err(Error::new(
+              ErrorKind::Other,
+              format!("Symlink loop detected resolving '{}'", path.display()),
+            ));
+          }
+          path = Cow::Owned(resolved_path);
+        }
+      }
+    }
+  }
+
+  fn lookup_entry_detail_until_symlink<'a>(
+    &'a self,
+    path: &Path,
+  ) -> Result<LookupUntilSymlinkEntry<'a>> {
     let mut final_path = Vec::new();
     let mut comps = path.components().peekable();
     if comps.peek().is_none() {
@@ -284,8 +319,10 @@ impl InMemorySysInner {
       let pos = match entries.binary_search_by(|e| e.name().cmp(&comp)) {
         Ok(p) => p,
         Err(_) => {
-          return Ok(LookupNoFollowEntry::NotFound(
-            final_path.into_iter().chain(comps).collect(),
+          return Ok(LookupUntilSymlinkEntry::Done(
+            LookupNoFollowEntry::NotFound(
+              final_path.into_iter().chain(comps).collect(),
+            ),
           ));
         }
       };
@@ -293,9 +330,11 @@ impl InMemorySysInner {
       match &entries[pos] {
         DirectoryEntry::Directory(dir) => {
           if comps.peek().is_none() {
-            return Ok(LookupNoFollowEntry::Found(
-              final_path.into_iter().collect(),
-              &entries[pos],
+            return Ok(LookupUntilSymlinkEntry::Done(
+              LookupNoFollowEntry::Found(
+                final_path.into_iter().collect(),
+                &entries[pos],
+              ),
             ));
           } else {
             entries = &dir.entries;
@@ -303,9 +342,11 @@ impl InMemorySysInner {
         }
         DirectoryEntry::File(_) => {
           if comps.peek().is_none() {
-            return Ok(LookupNoFollowEntry::Found(
-              final_path.into_iter().collect(),
-              &entries[pos],
+            return Ok(LookupUntilSymlinkEntry::Done(
+              LookupNoFollowEntry::Found(
+                final_path.into_iter().collect(),
+                &entries[pos],
+              ),
             ));
           } else {
             return Err(Error::new(
@@ -316,18 +357,28 @@ impl InMemorySysInner {
         }
         DirectoryEntry::Symlink(symlink) => {
           let current_path = final_path.into_iter().collect::<PathBuf>();
-          let target_path = normalize_path(&current_path.join(&symlink.target));
-          return Ok(LookupNoFollowEntry::Symlink {
-            current_path,
-            target_path,
-            entry: symlink,
-          });
+          // relative targets are relative to the symlink's directory
+          let symlink_dir = current_path.parent().unwrap_or(&current_path);
+          let target_path = normalize_path(&symlink_dir.join(&symlink.target));
+          if comps.peek().is_none() {
+            return Ok(LookupUntilSymlinkEntry::Done(
+              LookupNoFollowEntry::Symlink {
+                current_path,
+                target_path,
+                entry: symlink,
+              },
+            ));
+          } else {
+            return Ok(LookupUntilSymlinkEntry::MidPathSymlink(
+              target_path.join(comps.collect::<PathBuf>()),
+            ));
+          }
         }
       }
     }
 
-    Ok(LookupNoFollowEntry::NotFound(
-      final_path.into_iter().collect(),
+    Ok(LookupUntilSymlinkEntry::Done(
+      LookupNoFollowEntry::NotFound(final_path.into_iter().collect()),
     ))
   }
 
@@ -805,6 +856,10 @@ impl BaseFsOpen for InMemorySys {
     let time_now = inner.time_now();
     let umask = inner.umask;
     let path = inner.to_absolute_path(path);
+    // follow symlinks
+    let path = match inner.lookup_entry_detail(&path)? {
+      LookupEntry::Found(path, _) | LookupEntry::NotFound(path) => path,
+    };
 
     // Edge case: If `parent()` is None, path might be root or invalid
     // The minimal fix is to check for that scenario
@@ -931,7 +986,8 @@ impl BaseFsReadDir for InMemorySys {
 impl BaseFsReadLink for InMemorySys {
   fn base_fs_read_link(&self, path: &Path) -> io::Result<PathBuf> {
     let inner = self.0.read();
-    let detail = inner.lookup_entry_detail_no_follow(path)?;
+    let path = inner.to_absolute_path(path);
+    let detail = inner.lookup_entry_detail_no_follow(&path)?;
     match detail {
       LookupNoFollowEntry::NotFound(path) => Err(Error::new(
         ErrorKind::NotFound,
@@ -941,7 +997,7 @@ impl BaseFsReadLink for InMemorySys {
         ErrorKind::InvalidInput,
         format!("Path is not a symlink: '{}'", path.display()),
       )),
-      LookupNoFollowEntry::Symlink { target_path, .. } => Ok(target_path),
+      LookupNoFollowEntry::Symlink { entry, .. } => Ok(entry.target.clone()),
     }
   }
 }
@@ -2285,5 +2341,99 @@ mod tests {
     // This follows the symlink, so it changes the target file's mode
     let file_metadata = sys.fs_metadata("/test/file.txt").unwrap();
     assert_eq!(file_metadata.mode().unwrap(), 0o755);
+  }
+
+  #[test]
+  fn test_relative_symlink_target() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/a/b").unwrap();
+    sys.fs_create_dir_all("/a/real").unwrap();
+    sys.fs_write("/a/b/target.txt", "target").unwrap();
+    sys.fs_write("/a/real/file.txt", "file").unwrap();
+
+    // relative to the symlink's directory and not the cwd
+    sys.fs_symlink_file("target.txt", "/a/b/link.txt").unwrap();
+    assert_eq!(
+      sys.fs_read_link("/a/b/link.txt").unwrap(),
+      PathBuf::from("target.txt")
+    );
+    assert_eq!(
+      sys.fs_canonicalize("/a/b/link.txt").unwrap(),
+      PathBuf::from("/a/b/target.txt")
+    );
+    assert!(sys.fs_is_file("/a/b/link.txt").unwrap());
+    assert_eq!(sys.fs_read_to_string("/a/b/link.txt").unwrap(), "target");
+
+    sys.fs_symlink_dir("../real", "/a/b/dir_link").unwrap();
+    assert_eq!(
+      sys.fs_canonicalize("/a/b/dir_link").unwrap(),
+      PathBuf::from("/a/real")
+    );
+    assert_eq!(
+      sys.fs_read_to_string("/a/b/dir_link/file.txt").unwrap(),
+      "file"
+    );
+
+    // relative path to a symlink
+    sys.env_set_current_dir("/a/b").unwrap();
+    assert_eq!(
+      sys.fs_read_link("link.txt").unwrap(),
+      PathBuf::from("target.txt")
+    );
+    assert_eq!(sys.fs_read_to_string("link.txt").unwrap(), "target");
+  }
+
+  #[test]
+  fn test_symlink_in_middle_of_path() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/real/sub").unwrap();
+    sys.fs_write("/real/sub/file.txt", "file").unwrap();
+    sys.fs_symlink_dir("/real", "/dir_link").unwrap();
+    sys
+      .fs_symlink_file("/dir_link/sub/file.txt", "/file_link.txt")
+      .unwrap();
+
+    assert_eq!(
+      sys.fs_canonicalize("/dir_link/sub/file.txt").unwrap(),
+      PathBuf::from("/real/sub/file.txt")
+    );
+    assert!(sys.fs_is_file("/dir_link/sub/file.txt").unwrap());
+    assert!(sys.fs_is_dir("/dir_link/sub").unwrap());
+    assert!(!sys.fs_exists("/dir_link/sub/missing.txt").unwrap());
+    assert_eq!(
+      sys.fs_canonicalize("/file_link.txt").unwrap(),
+      PathBuf::from("/real/sub/file.txt")
+    );
+    assert_eq!(sys.fs_read_to_string("/file_link.txt").unwrap(), "file");
+
+    // the final component is still not followed
+    assert!(sys
+      .fs_symlink_metadata("/file_link.txt")
+      .unwrap()
+      .file_type()
+      .is_symlink());
+    assert!(sys
+      .fs_symlink_metadata("/dir_link/sub/file.txt")
+      .unwrap()
+      .file_type()
+      .is_file());
+
+    // writing through a symlink writes to the target
+    sys.fs_write("/file_link.txt", "updated").unwrap();
+    assert_eq!(
+      sys.fs_read_to_string("/real/sub/file.txt").unwrap(),
+      "updated"
+    );
+    assert!(sys.fs_is_symlink("/file_link.txt").unwrap());
+  }
+
+  #[test]
+  fn test_symlink_loop_in_middle_of_path() {
+    let sys = InMemorySys::default();
+    sys.fs_create_dir_all("/dir").unwrap();
+    sys.fs_symlink_dir("/dir/b", "/dir/a").unwrap();
+    sys.fs_symlink_dir("/dir/a", "/dir/b").unwrap();
+    let err = sys.fs_metadata("/dir/a/file.txt").unwrap_err();
+    assert!(err.to_string().contains("Symlink loop detected"), "{err}");
   }
 }
