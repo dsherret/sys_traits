@@ -112,7 +112,7 @@ impl<T> CwdSys<T> {
   }
 
   fn resolve_path_from<'a>(cwd: &Path, path: &'a Path) -> Cow<'a, Path> {
-    if path.is_absolute() || path.as_os_str().is_empty() {
+    if is_absolute(path) || path.as_os_str().is_empty() {
       Cow::Borrowed(path)
     } else {
       Cow::Owned(cwd.join(path))
@@ -468,6 +468,20 @@ impl<T: ThreadSleep> ThreadSleep for CwdSys<T> {
   fn thread_sleep(&self, duration: Duration) {
     self.inner.thread_sleep(duration);
   }
+}
+
+fn is_absolute(path: &Path) -> bool {
+  if path.is_absolute() {
+    return true;
+  }
+  // Wasm uses Unix-style paths even when running on Windows, so a path
+  // like `C:\dir` that wasn't converted with `wasm_string_to_path` isn't
+  // considered absolute, but the inner system still treats it as such
+  #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+  if super::is_windows() {
+    return path.to_str().is_some_and(super::is_windows_absolute_path);
+  }
+  false
 }
 
 #[cfg(all(test, feature = "memory"))]
