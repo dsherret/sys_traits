@@ -767,6 +767,72 @@ mod real_tests {
     sys.env_set_current_dir("..").unwrap();
     assert_eq!(sys.env_current_dir().unwrap(), cwd.join("sub"));
     assert_eq!(sys.fs_read_to_string("file.txt").unwrap(), "data");
+
+    /// A real system that always returns verbatim paths (ex. `\\?\C:\dir`)
+    /// when canonicalizing, regardless of the `strip_unc` feature.
+    #[derive(Debug, Clone)]
+    struct VerbatimCanonicalizeSys;
+
+    impl EnvCurrentDir for VerbatimCanonicalizeSys {
+      fn env_current_dir(&self) -> io::Result<PathBuf> {
+        std::fs::canonicalize(RealSys.env_current_dir()?)
+      }
+    }
+
+    impl BaseFsCanonicalize for VerbatimCanonicalizeSys {
+      fn base_fs_canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        std::fs::canonicalize(path)
+      }
+    }
+
+    impl BaseFsMetadata for VerbatimCanonicalizeSys {
+      type Metadata = <RealSys as BaseFsMetadata>::Metadata;
+
+      fn base_fs_metadata(&self, path: &Path) -> io::Result<Self::Metadata> {
+        RealSys.base_fs_metadata(path)
+      }
+
+      fn base_fs_symlink_metadata(
+        &self,
+        path: &Path,
+      ) -> io::Result<Self::Metadata> {
+        RealSys.base_fs_symlink_metadata(path)
+      }
+    }
+
+    impl BaseFsCreateDir for VerbatimCanonicalizeSys {
+      fn base_fs_create_dir(
+        &self,
+        path: &Path,
+        options: &CreateDirOptions,
+      ) -> io::Result<()> {
+        RealSys.base_fs_create_dir(path, options)
+      }
+    }
+
+    impl BaseFsRead for VerbatimCanonicalizeSys {
+      fn base_fs_read(&self, path: &Path) -> io::Result<Cow<'static, [u8]>> {
+        RealSys.base_fs_read(path)
+      }
+    }
+
+    impl BaseFsReadDir for VerbatimCanonicalizeSys {
+      type ReadDirEntry = <RealSys as BaseFsReadDir>::ReadDirEntry;
+
+      fn base_fs_read_dir(
+        &self,
+        path: &Path,
+      ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>>
+      {
+        RealSys.base_fs_read_dir(path)
+      }
+    }
+
+    impl BaseFsWrite for VerbatimCanonicalizeSys {
+      fn base_fs_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
+        RealSys.base_fs_write(path, data)
+      }
+    }
   }
 
   #[test]
@@ -774,79 +840,5 @@ mod real_tests {
     let sys = CwdSys::new(RealSys).unwrap();
     let _: &RealSys = sys.inner();
     let _: RealSys = sys.into_inner();
-  }
-
-  /// A real system that always returns verbatim paths (ex. `\\?\C:\dir`)
-  /// when canonicalizing, regardless of the `strip_unc` feature.
-  #[cfg(windows)]
-  #[derive(Debug, Clone)]
-  struct VerbatimCanonicalizeSys;
-
-  #[cfg(windows)]
-  impl EnvCurrentDir for VerbatimCanonicalizeSys {
-    fn env_current_dir(&self) -> io::Result<PathBuf> {
-      std::fs::canonicalize(RealSys.env_current_dir()?)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsCanonicalize for VerbatimCanonicalizeSys {
-    fn base_fs_canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-      std::fs::canonicalize(path)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsMetadata for VerbatimCanonicalizeSys {
-    type Metadata = <RealSys as BaseFsMetadata>::Metadata;
-
-    fn base_fs_metadata(&self, path: &Path) -> io::Result<Self::Metadata> {
-      RealSys.base_fs_metadata(path)
-    }
-
-    fn base_fs_symlink_metadata(
-      &self,
-      path: &Path,
-    ) -> io::Result<Self::Metadata> {
-      RealSys.base_fs_symlink_metadata(path)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsCreateDir for VerbatimCanonicalizeSys {
-    fn base_fs_create_dir(
-      &self,
-      path: &Path,
-      options: &CreateDirOptions,
-    ) -> io::Result<()> {
-      RealSys.base_fs_create_dir(path, options)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsRead for VerbatimCanonicalizeSys {
-    fn base_fs_read(&self, path: &Path) -> io::Result<Cow<'static, [u8]>> {
-      RealSys.base_fs_read(path)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsReadDir for VerbatimCanonicalizeSys {
-    type ReadDirEntry = <RealSys as BaseFsReadDir>::ReadDirEntry;
-
-    fn base_fs_read_dir(
-      &self,
-      path: &Path,
-    ) -> io::Result<Box<dyn Iterator<Item = io::Result<Self::ReadDirEntry>>>>
-    {
-      RealSys.base_fs_read_dir(path)
-    }
-  }
-
-  #[cfg(windows)]
-  impl BaseFsWrite for VerbatimCanonicalizeSys {
-    fn base_fs_write(&self, path: &Path, data: &[u8]) -> io::Result<()> {
-      RealSys.base_fs_write(path, data)
-    }
   }
 }
