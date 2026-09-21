@@ -49,6 +49,18 @@ impl<T: EnvCurrentDir> CwdSys<T> {
   /// current directory reported by the inner system.
   pub fn new(inner: T) -> io::Result<Self> {
     let cwd = inner.env_current_dir()?;
+    Self::new_with_cwd(inner, cwd)
+  }
+}
+
+impl<T> CwdSys<T> {
+  /// Creates a wrapper whose logical current working directory starts at the
+  /// provided path, which should be absolute.
+  ///
+  /// Unlike changing the current directory, this does not canonicalize the
+  /// path or check that it's a directory in the inner system.
+  pub fn new_with_cwd(inner: T, cwd: impl Into<PathBuf>) -> io::Result<Self> {
+    let cwd = cwd.into();
     if cwd.as_os_str().is_empty() {
       return Err(io::Error::new(
         io::ErrorKind::NotFound,
@@ -60,9 +72,7 @@ impl<T: EnvCurrentDir> CwdSys<T> {
       cwd: Arc::new(RwLock::new(cwd)),
     })
   }
-}
 
-impl<T> CwdSys<T> {
   /// Returns a reference to the inner system.
   pub fn inner(&self) -> &T {
     &self.inner
@@ -521,6 +531,29 @@ mod memory_tests {
     let err = sys.env_set_current_dir("missing").unwrap_err();
     assert_eq!(err.kind(), io::ErrorKind::NotFound);
     assert_eq!(sys.env_current_dir().unwrap(), cwd);
+  }
+
+  #[test]
+  fn new_with_cwd_sets_initial_cwd_without_touching_inner_system() {
+    let inner = InMemorySys::new_with_cwd("/");
+    inner.fs_create_dir_all("/initial").unwrap();
+    inner.fs_write("/initial/file.txt", "data").unwrap();
+
+    let sys = CwdSys::new_with_cwd(inner.clone(), "/initial").unwrap();
+    assert_eq!(sys.env_current_dir().unwrap(), PathBuf::from("/initial"));
+    assert_eq!(sys.fs_read_to_string("file.txt").unwrap(), "data");
+    assert_eq!(inner.env_current_dir().unwrap(), PathBuf::from("/"));
+
+    // not validated against the inner system
+    let sys = CwdSys::new_with_cwd(inner.clone(), "/missing").unwrap();
+    assert_eq!(sys.env_current_dir().unwrap(), PathBuf::from("/missing"));
+    assert_eq!(
+      sys.fs_read("file.txt").unwrap_err().kind(),
+      io::ErrorKind::NotFound
+    );
+
+    let err = CwdSys::new_with_cwd(inner, "").unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::NotFound);
   }
 
   #[test]

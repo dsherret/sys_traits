@@ -63,6 +63,9 @@ sys.env_set_current_dir("/project")?;
 let config = sys.fs_read("deno.json")?;
 ```
 
+To start at a specific directory instead of the inner system's current
+directory, use `CwdSys::new_with_cwd(RealSys, "/project")`.
+
 ## Creating an implementation
 
 To create an implementation you must implement the traits; however, some traits
