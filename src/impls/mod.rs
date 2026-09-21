@@ -151,6 +151,7 @@ pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
 
 /// Strips the unc prefix (ex. \\?\) from Windows paths.
 #[cfg(all(windows, feature = "strip_unc"))]
+#[allow(dead_code)] // only used with the "real" feature
 pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
   use std::path::Component;
   use std::path::Prefix;
@@ -159,13 +160,6 @@ pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
   match components.next() {
     Some(Component::Prefix(prefix)) => {
       match prefix.kind() {
-        // \\?\device
-        Prefix::Verbatim(device) => {
-          let mut path = PathBuf::new();
-          path.push(format!(r"\\{}\", device.to_string_lossy()));
-          path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
-          path
-        }
         // \\?\c:\path
         Prefix::VerbatimDisk(_) => {
           let mut path = PathBuf::new();
@@ -184,9 +178,41 @@ pub(super) fn strip_unc_prefix(path: PathBuf) -> PathBuf {
           path.extend(components.filter(|c| !matches!(c, Component::RootDir)));
           path
         }
+        // Leave other verbatim paths (ex. \\?\Volume{guid}\path) as-is because
+        // they have no equivalent non-verbatim form. For example, stripping
+        // the prefix to \\Volume{guid}\path would make it a path to a server.
         _ => path,
       }
     }
     _ => path,
+  }
+}
+
+#[cfg(all(test, windows, feature = "strip_unc"))]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_strip_unc_prefix() {
+    let run_test = |input: &str, expected: &str| {
+      assert_eq!(
+        strip_unc_prefix(PathBuf::from(input)),
+        PathBuf::from(expected),
+        "input: {input}"
+      );
+    };
+
+    run_test(r"C:\dir\file.txt", r"C:\dir\file.txt");
+    run_test(r"\\?\C:\dir\file.txt", r"C:\dir\file.txt");
+    run_test(r"\\?\C:\", r"C:\");
+    run_test(r"\\server\share\file.txt", r"\\server\share\file.txt");
+    run_test(
+      r"\\?\UNC\server\share\dir\file.txt",
+      r"\\server\share\dir\file.txt",
+    );
+    run_test(
+      r"\\?\Volume{b75e2c83-0000-0000-0000-602f00000000}\dir\file.txt",
+      r"\\?\Volume{b75e2c83-0000-0000-0000-602f00000000}\dir\file.txt",
+    );
   }
 }
