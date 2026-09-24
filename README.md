@@ -48,6 +48,24 @@ Comes with two implementations that implement all the traits.
     (https://github.com/dsherret/sys_traits/issues/4)
 - `sys_traits::impl::InMemorySys` - An in-memory system useful for testing.
 
+## Instance-scoped current directory
+
+Use `CwdSys` to give a system instance a logical current directory without
+changing the process current directory. Clones of the wrapper share current
+directory changes.
+
+```rs
+use sys_traits::impls::{CwdSys, RealSys};
+use sys_traits::{EnvSetCurrentDir, FsRead};
+
+let sys = CwdSys::new(RealSys)?;
+sys.env_set_current_dir("/project")?;
+let config = sys.fs_read("deno.json")?;
+```
+
+To start at a specific directory instead of the inner system's current
+directory, use `CwdSys::new_with_cwd(RealSys, "/project")`.
+
 ## Creating an implementation
 
 To create an implementation you must implement the traits; however, some traits

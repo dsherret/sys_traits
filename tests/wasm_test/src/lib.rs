@@ -2,10 +2,13 @@ use std::io::ErrorKind;
 use std::io::Read;
 use std::io::Seek;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::SystemTime;
 
+use sys_traits::impls::wasm_path_to_str;
+use sys_traits::impls::CwdSys;
 use sys_traits::impls::RealSys;
 use sys_traits::CreateDirOptions;
 use sys_traits::EnvCacheDir;
@@ -476,6 +479,30 @@ fn run() -> std::io::Result<()> {
       .kind(),
     ErrorKind::Unsupported
   );
+
+  // cwd sys
+  {
+    let cwd_sys = CwdSys::new(sys.clone())?;
+    assert_eq!(cwd_sys.env_current_dir()?, temp_dir);
+    cwd_sys.env_set_current_dir("sub")?;
+    assert_eq!(cwd_sys.env_current_dir()?, temp_dir.join("sub"));
+    assert_eq!(sys.env_current_dir()?, temp_dir);
+    cwd_sys.fs_write("cwd_sys.txt", "data")?;
+    assert_eq!(sys.fs_read_to_string("sub/cwd_sys.txt")?, "data");
+
+    if is_windows {
+      // Windows paths not converted with `wasm_string_to_path` (ex. `C:\dir`)
+      // should be treated as absolute and not joined to the cwd
+      let to_raw_path =
+        |path: &Path| PathBuf::from(wasm_path_to_str(path).into_owned());
+      let raw_file_path = to_raw_path(&temp_dir.join("sub/cwd_sys.txt"));
+      assert!(!raw_file_path.is_absolute());
+      assert_eq!(cwd_sys.fs_read_to_string(&raw_file_path)?, "data");
+      cwd_sys.env_set_current_dir(to_raw_path(&temp_dir))?;
+      assert_eq!(cwd_sys.env_current_dir()?, temp_dir);
+    }
+    sys.fs_remove_file("sub/cwd_sys.txt")?;
+  }
 
   log("Success!");
 

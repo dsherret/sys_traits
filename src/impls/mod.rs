@@ -1,5 +1,9 @@
 use std::path::PathBuf;
 
+mod cwd;
+
+pub use cwd::CwdSys;
+
 #[cfg(feature = "real")]
 // do not implement Copy so that swapping out the RealSys
 // with another implementation that requires Clone based
@@ -86,24 +90,6 @@ pub type RealFsDirEntry = real::RealFsDirEntry;
 pub fn wasm_string_to_path(path: String) -> PathBuf {
   #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
   {
-    fn is_windows_absolute_path(path: &str) -> bool {
-      let mut chars = path.chars();
-      let Some(first_char) = chars.next() else {
-        return false;
-      };
-      if !first_char.is_alphabetic() {
-        return false;
-      }
-      let Some(second_char) = chars.next() else {
-        return false;
-      };
-      if second_char != ':' {
-        return false;
-      }
-      let third_char = chars.next();
-      third_char == Some('\\') || third_char == Some('/')
-    }
-
     // one day we might have:
     // but for now, do this hack for windows users
     if wasm::is_windows() && is_windows_absolute_path(&path) {
@@ -140,6 +126,27 @@ pub fn wasm_path_to_str(path: &std::path::Path) -> std::borrow::Cow<'_, str> {
   {
     path.to_string_lossy()
   }
+}
+
+/// Gets if the path is a Windows absolute path (ex. `C:\dir`), which
+/// Rust doesn't consider absolute in Wasm because it uses Unix-style paths.
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+pub(super) fn is_windows_absolute_path(path: &str) -> bool {
+  let mut chars = path.chars();
+  let Some(first_char) = chars.next() else {
+    return false;
+  };
+  if !first_char.is_alphabetic() {
+    return false;
+  }
+  let Some(second_char) = chars.next() else {
+    return false;
+  };
+  if second_char != ':' {
+    return false;
+  }
+  let third_char = chars.next();
+  third_char == Some('\\') || third_char == Some('/')
 }
 
 #[cfg(any(not(windows), not(feature = "strip_unc")))]
