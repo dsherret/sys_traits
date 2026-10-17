@@ -223,8 +223,135 @@ impl EnvTempDir for RealSys {
 impl BaseFsCanonicalize for RealSys {
   #[inline]
   fn base_fs_canonicalize(&self, path: &Path) -> Result<PathBuf> {
-    fs::canonicalize(path).map(strip_unc_prefix)
+    #[cfg(all(windows, feature = "winapi"))]
+    {
+      windows_canonicalize(path)
+    }
+    #[cfg(not(all(windows, feature = "winapi")))]
+    {
+      fs::canonicalize(path).map(strip_unc_prefix)
+    }
   }
+}
+
+/// Canonicalizes in a way that also works inside a sandbox (e.g. a Windows
+/// AppContainer) that is granted its working directory but not the volume root.
+///
+/// `std::fs::canonicalize` resolves to a drive-letter path via
+/// `GetFinalPathNameByHandle(VOLUME_NAME_DOS)`, whose drive-letter lookup
+/// queries the Mount Manager and fails with "Access is denied. (os error 5)" in
+/// such a sandbox, even when the file is readable. The normal/fast path is left
+/// untouched; only on a permission error do we re-resolve the (now known to
+/// exist) path without the Mount Manager.
+/// See <https://github.com/denoland/deno/issues/35543>.
+#[cfg(all(windows, feature = "winapi"))]
+fn windows_canonicalize(path: &Path) -> Result<PathBuf> {
+  match fs::canonicalize(path) {
+    Ok(canonicalized) => Ok(strip_unc_prefix(canonicalized)),
+    Err(err) if err.kind() == ErrorKind::PermissionDenied => {
+      // Note: the fallback result is intentionally NOT passed through
+      // `strip_unc_prefix`. It returns a `\\?\GLOBALROOT\Device\...` path whose
+      // `\\?\` prefix is required (stripping it would yield an invalid
+      // `\\GLOBALROOT\...` UNC-looking path).
+      canonicalize_without_mount_manager(path).or(Err(err))
+    }
+    Err(err) => Err(err),
+  }
+}
+
+/// Resolves an existing path to its canonical form using only APIs that do not
+/// require Mount Manager access.
+///
+/// Inspired by [onnxruntime#28509] ("Fix WeaklyCanonicalPath
+/// ERROR_ACCESS_DENIED in Windows AppContainers"): instead of `VOLUME_NAME_DOS`
+/// (which needs the Mount Manager to map the volume to a drive letter), query
+/// `GetFinalPathNameByHandle` with `VOLUME_NAME_NT` and prefix the resulting NT
+/// device path with `\\?\GLOBALROOT` so it stays a valid Win32 path.
+///
+/// Difference in the result vs the normal path: this returns the NT-volume form
+///
+/// ```text
+/// \\?\GLOBALROOT\Device\HarddiskVolume3\Users\me\file   (sandbox fallback)
+/// ```
+///
+/// rather than the drive-letter form `\\?\C:\Users\me\file` that
+/// `std::fs::canonicalize` returns outside the sandbox. Both resolve to the same
+/// file (verified equivalent via re-canonicalization in the unit test), but the
+/// string differs, so a process that canonicalizes some paths inside the sandbox
+/// and others outside must compare them by file identity, not by string.
+///
+/// Using `VOLUME_NAME_NT` (not `VOLUME_NAME_NONE`) is deliberate: it keeps the
+/// volume identity in the path, so a cross-volume reparse point is represented
+/// faithfully as a distinct device and needs no extra check. An earlier revision
+/// of this fix instead rebuilt the drive letter from `VOLUME_NAME_NONE` and had
+/// to re-open the rebuilt path and compare `VOLUME_NAME_NT` to reject
+/// cross-volume escapes; adopting the onnxruntime approach removed that drive
+/// reconstruction and the cross-volume guard entirely, and turned the
+/// cross-volume "return an error" case into a correct, distinct result.
+///
+/// [onnxruntime#28509]: https://github.com/microsoft/onnxruntime/pull/28509
+#[cfg(all(windows, feature = "winapi"))]
+fn canonicalize_without_mount_manager(path: &Path) -> Result<PathBuf> {
+  use std::os::windows::ffi::OsStrExt;
+  use std::os::windows::ffi::OsStringExt;
+  use windows_sys::Win32::Storage::FileSystem::VOLUME_NAME_NT;
+
+  // Reached only after `std::fs::canonicalize` returned `PermissionDenied`,
+  // which means the full path exists and opened; no ancestor walk is needed.
+  let file = open_for_path_query(path)?;
+  let nt_path = final_path_by_handle(&file, VOLUME_NAME_NT)?;
+  drop(file);
+
+  // Prefix `\\?\GLOBALROOT` so the NT device path (`\Device\HarddiskVolumeN\..`)
+  // is a usable Win32 path.
+  const GLOBAL_ROOT: &str = r"\\?\GLOBALROOT";
+  let mut wide: Vec<u16> =
+    Vec::with_capacity(GLOBAL_ROOT.len() + nt_path.len());
+  wide.extend(GLOBAL_ROOT.encode_utf16());
+  wide.extend(nt_path.encode_wide());
+  Ok(PathBuf::from(OsString::from_wide(&wide)))
+}
+
+/// Opens a file/directory only to query its name. `access_mode(0)` is enough for
+/// `GetFinalPathNameByHandle`; `FILE_FLAG_BACKUP_SEMANTICS` allows opening
+/// directories. Reparse points are followed (not `FILE_FLAG_OPEN_REPARSE_POINT`)
+/// so symlinks/junctions are resolved.
+#[cfg(all(windows, feature = "winapi"))]
+fn open_for_path_query(path: &Path) -> Result<fs::File> {
+  use std::os::windows::fs::OpenOptionsExt;
+  use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
+  fs::OpenOptions::new()
+    .access_mode(0)
+    .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+    .open(path)
+}
+
+#[cfg(all(windows, feature = "winapi"))]
+fn final_path_by_handle(file: &fs::File, flags: u32) -> Result<OsString> {
+  use std::os::windows::ffi::OsStringExt;
+  use std::os::windows::io::AsRawHandle;
+  use windows_sys::Win32::Storage::FileSystem::GetFinalPathNameByHandleW;
+  use windows_sys::Win32::Storage::FileSystem::FILE_NAME_NORMALIZED;
+
+  let handle = file.as_raw_handle();
+  let flags = FILE_NAME_NORMALIZED | flags;
+  // SAFETY: winapi call; a null buffer of length 0 returns the required size
+  // (including the terminating null).
+  let needed = unsafe {
+    GetFinalPathNameByHandleW(handle, std::ptr::null_mut(), 0, flags)
+  };
+  if needed == 0 {
+    return Err(Error::last_os_error());
+  }
+  let mut buf = vec![0u16; needed as usize];
+  // SAFETY: winapi call; `buf` holds `needed` u16s.
+  let written = unsafe {
+    GetFinalPathNameByHandleW(handle, buf.as_mut_ptr(), buf.len() as u32, flags)
+  };
+  if written == 0 || written as usize >= buf.len() {
+    return Err(Error::last_os_error());
+  }
+  Ok(OsString::from_wide(&buf[..written as usize]))
 }
 
 #[cfg(unix)]
@@ -1204,5 +1331,58 @@ mod test {
   fn test_fs_canonicalize_empty() {
     let result = RealSys.fs_canonicalize("");
     assert_eq!(result.unwrap_err().kind(), ErrorKind::NotFound);
+  }
+
+  // Exercises the Mount-Manager-free fallback (the path taken inside a Windows
+  // AppContainer, deno#35543) directly, without needing an actual sandbox: it
+  // must resolve a directory junction and point at the same file as the normal
+  // canonicalize. The fallback returns the NT-volume form (inspired by
+  // onnxruntime#28509), which differs in string from the drive-letter form, so
+  // equivalence is checked by re-canonicalizing (works outside a sandbox).
+  #[cfg(all(target_os = "windows", feature = "winapi"))]
+  #[test]
+  fn test_fs_canonicalize_without_mount_manager_resolves_junction() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let base = temp_dir.path();
+    RealSys.fs_create_dir_all(base.join("real")).unwrap();
+    RealSys
+      .fs_write(base.join("real").join("hello.txt"), "hi")
+      .unwrap();
+    // directory junction (a reparse point) -> real; needs no special privilege
+    let status = std::process::Command::new("cmd")
+      .args(["/C", "mklink", "/J"])
+      .arg(base.join("link"))
+      .arg(base.join("real"))
+      .status()
+      .unwrap();
+    assert!(status.success(), "mklink /J failed");
+
+    let link_hello = base.join("link").join("hello.txt");
+    let fallback =
+      super::canonicalize_without_mount_manager(&link_hello).unwrap();
+
+    // NT-volume form, not the drive-letter form.
+    assert!(
+      fallback
+        .to_string_lossy()
+        .starts_with(r"\\?\GLOBALROOT\Device\"),
+      "unexpected fallback form: {}",
+      fallback.display()
+    );
+    // It opens the real file (junction resolved).
+    assert_eq!(RealSys.fs_read_to_string(&fallback).unwrap(), "hi");
+    // Equivalence with the normal canonicalize: re-canonicalizing the fallback
+    // (works outside a sandbox) yields the same file as canonicalizing `real`.
+    assert_eq!(
+      std::fs::canonicalize(&fallback).unwrap(),
+      std::fs::canonicalize(base.join("real").join("hello.txt")).unwrap()
+    );
+    // The public entrypoint resolves the junction too (normal, non-sandbox).
+    assert_eq!(
+      RealSys.fs_canonicalize(&link_hello).unwrap(),
+      RealSys
+        .fs_canonicalize(base.join("real").join("hello.txt"))
+        .unwrap()
+    );
   }
 }
